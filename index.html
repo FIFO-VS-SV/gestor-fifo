@@ -4,7 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestor FIFO – Rebaixa</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// SheetJS loader with fallback CDNs
+(function(){
+  var urls = [
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+  ];
+  var idx = 0;
+  function load(){
+    if(idx >= urls.length){ document.getElementById('xlsx-err').style.display='block'; return; }
+    var s = document.createElement('script');
+    s.src = urls[idx++];
+    s.onerror = load;
+    s.onload = function(){ document.getElementById('xlsx-err').style.display='none'; };
+    document.head.appendChild(s);
+  }
+  load();
+})();
+</script>
+<div id="xlsx-err" style="display:none;position:fixed;top:0;left:0;right:0;background:#b91c1c;color:#fff;text-align:center;padding:10px;font-size:13px;font-weight:600;z-index:9999">
+  ⚠ Biblioteca de exportação não carregou. Verifique sua conexão com a internet e recarregue a página.
+</div>
 <style>
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 
@@ -188,7 +210,7 @@ select.filter-mini { cursor:pointer; }
   <div class="logo">⏱</div>
   <div>
     <div class="app-title">GESTOR FIFO – REBAIXA</div>
-    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.0</span></div>
+    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.1</span></div>
   </div>
   <button id="theme-toggle" onclick="toggleTheme()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><span id="theme-icon">☀</span> <span id="theme-label">Tema Claro</span></button>
 </header>
@@ -868,6 +890,10 @@ function resetFifo(){
 
 // ── exportar ──
 function exportarFifo(){
+  if(typeof XLSX === 'undefined'){
+    alert('Biblioteca de exportação ainda não carregou. Aguarde alguns segundos e tente novamente.');
+    return;
+  }
   const chosen=fifoData.filter(p=>selection[p._id]);
   if(!chosen.length){document.getElementById('fifo-rev-err').textContent='Selecione ao menos um produto.';return;}
   document.getElementById('fifo-rev-err').textContent='';

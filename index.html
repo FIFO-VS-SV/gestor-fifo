@@ -188,7 +188,7 @@ select.filter-mini { cursor:pointer; }
   <div class="logo">⏱</div>
   <div>
     <div class="app-title">GESTOR FIFO – REBAIXA</div>
-    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO</div>
+    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.0</span></div>
   </div>
   <button id="theme-toggle" onclick="toggleTheme()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><span id="theme-icon">☀</span> <span id="theme-label">Tema Claro</span></button>
 </header>
@@ -992,12 +992,19 @@ function exportarFifo(){
   // Data rows start at row 5
   chosen.forEach((_,i)=>{
     const r = i+5;
+    const isHighlighted = Number(p._qtd)>60 || String(p._desc).toUpperCase().includes(' KG');
+    const dataStyleHighlight = {
+      font:{name:'Calibri',sz:11,bold:true,color:{rgb:'D97706'}},
+      alignment:{horizontal:'left',vertical:'center'},
+      border:thinBorder,
+      fill:{patternType:'solid',fgColor:{rgb:'1C1400'}}
+    };
     cols.forEach((c,ci)=>{
       const ref=c+r;
       if(!ws[ref]) return;
-      if(ci===3)       ws[ref].s = dataStyleL;   // D: DESCRIÇÃO left
-      else if(ci===10) ws[ref].s = dataStyleR;   // K: PREÇO VENDA currency
-      else if(ci===11) ws[ref].s = dataStylePct; // L: MARGEM %
+      if(ci===3)       ws[ref].s = isHighlighted ? dataStyleHighlight : dataStyleL;
+      else if(ci===10) ws[ref].s = dataStyleR;
+      else if(ci===11) ws[ref].s = dataStylePct;
       else             ws[ref].s = dataStyleC;
     });
     // DIAS VENC highlight

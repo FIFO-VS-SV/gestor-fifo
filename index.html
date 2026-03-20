@@ -117,7 +117,7 @@ header { background:var(--bg2); border-bottom:1px solid var(--border); padding:1
 /* FIFO grid: cb loja plu desc venc dias qtd avaria | bPreco bVal bData | preco margem status */
 .th-f,.tr-f {
   display:grid;
-  grid-template-columns: 32px 44px 68px 1fr 96px 44px 44px 72px  98px 96px 106px  86px 74px 86px;
+  grid-template-columns: 32px 44px 68px 1fr 96px 44px minmax(44px,68px) 72px  98px 96px 106px  86px 74px 86px;
   padding:8px 12px; align-items:center; gap:2px;
 }
 /* Principal preview grid: plu desc comprador status quebra */
@@ -166,7 +166,7 @@ header { background:var(--bg2); border-bottom:1px solid var(--border); padding:1
 .btn-back { padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:var(--bg2);color:var(--text2); }
 .rev-err { font-size:12px;color:#f87171; }
 .empty { padding:36px;text-align:center;color:var(--text3); }
-.sort-row { display:grid; grid-template-columns: 32px 44px 68px 1fr 96px 44px 44px 72px  98px 96px 106px  86px 74px 86px; padding:4px 12px; align-items:center; gap:2px; background:var(--sort-bg); border-bottom:1px solid var(--border); }
+.sort-row { display:grid; grid-template-columns: 32px 44px 68px 1fr 96px 44px minmax(44px,68px) 72px  98px 96px 106px  86px 74px 86px; padding:4px 12px; align-items:center; gap:2px; background:var(--sort-bg); border-bottom:1px solid var(--border); }
 .sort-cell { display:flex; align-items:center; gap:3px; }
 .sort-btn { background:none; border:none; cursor:pointer; color:var(--text3); font-size:10px; padding:2px 3px; border-radius:3px; transition:.15s; display:flex; align-items:center; gap:1px; }
 .sort-btn:hover { background:#21262d; color:var(--text); }
@@ -652,7 +652,15 @@ function loadFifo(file){
         return {
           _id:i, _loja:get(row,idx.loja), _plu:plu,
           _desc:desc, _avaria:avaria,
-          _venc:get(row,idx.venc), _dias:get(row,idx.dias), _qtd:get(row,idx.qtd),
+          _venc:get(row,idx.venc), _dias:get(row,idx.dias),
+          _qtd:(()=>{
+            const raw=String(get(row,idx.qtd)??'').trim();
+            if(raw==='') return '';
+            // remove unit suffixes and extract numeric part
+            const clean=raw.replace(/\b(UND|UNID|UN|KGS|KG)\b/gi,'').replace(/[^0-9.,]/g,'').trim();
+            const n=parseFloat(clean.replace(',','.'));
+            return isNaN(n)?raw:n;
+          })(),
           _preco:get(row,idx.preco), _margem:get(row,idx.margem),
           _diafeito:get(row,idx.diaf),
           _rebaixa:!!(get(row,idx.diaf)&&String(get(row,idx.diaf)).trim()!==''),

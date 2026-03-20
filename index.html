@@ -210,7 +210,7 @@ select.filter-mini { cursor:pointer; }
   <div class="logo">⏱</div>
   <div>
     <div class="app-title">GESTOR FIFO – REBAIXA</div>
-    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.1</span></div>
+    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.2</span></div>
   </div>
   <button id="theme-toggle" onclick="toggleTheme()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><span id="theme-icon">☀</span> <span id="theme-label">Tema Claro</span></button>
 </header>
@@ -903,150 +903,63 @@ function exportarFifo(){
   const monthNames=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
   const titleStr=`PLANILHA FIFO ${monthNames[today.getMonth()]}  -  ${today.getFullYear()}`;
 
-  const wb = XLSX.utils.book_new();
+  // Build AOA
   const aoa = [];
-
-  // Row 1: title (merged A1:L2 via !merges)
-  aoa.push([titleStr,'','','','','','','','','','','']);
-  // Row 2: merged continuation
-  aoa.push(['','','','','','','','','','','','']);
-  // Row 3: spacer
-  aoa.push(['','','','','','','','','','','','']);
-  // Row 4: header
+  aoa.push([titleStr,'','','','','','','','','','','']); // row 1 title
+  aoa.push(['','','','','','','','','','','','']);         // row 2 merged
+  aoa.push(['','','','','','','','','','','','']);         // row 3 spacer
   aoa.push(['Nº','LOJA','PLU','DESCRIÇÃO','DIA PASSADO','AVARIA','DIA FEITO','VENCIMENTO','DIAS VENC.','QUANT. VENC','PREÇO VENDA','MARGEM (%)']);
-  // Data rows
+
   chosen.forEach((p,i)=>{
     const pv = prices[p._id]  ? parseFloat(prices[p._id])  : (p._preco  && p._preco !==0 ? p._preco  : '');
     const mg = margins[p._id] ? parseFloat(margins[p._id]) : (p._margem && p._margem!==0 ? p._margem : '');
+    const m  = getVerifMatch(p._plu);
+    const diaFeito = (m && m.dataFeita) ? fmtDate(m.dataFeita) : '';
     aoa.push([
       i+1,
-      p._loja!==''  ? Number(p._loja) : '',
-      p._plu!==''   ? Number(p._plu)  : '',
-      p._desc || '',
+      p._loja!=='' ? Number(p._loja)||p._loja : '',
+      p._plu !=='' ? Number(p._plu) ||p._plu  : '',
+      p._desc||'',
       todayStr,
-      p._avaria || '',
-      (()=>{
-        const m=getVerifMatch(p._plu);
-        if(m && m.dataFeita) return fmtDate(m.dataFeita);
-        return '';
-      })(),
+      p._avaria||'',
+      diaFeito,
       fmtDate(p._venc),
-      p._dias!=='' ? Number(p._dias) : '',
-      p._qtd !=='' ? Number(p._qtd)  : '',
-      pv !== '' ? pv : '',
-      mg !== '' ? mg : '',
+      p._dias!=='' ? Number(p._dias)||'' : '',
+      p._qtd !=='' ? Number(p._qtd) ||'' : '',
+      pv!=='' ? pv : '',
+      mg!=='' ? mg : '',
     ]);
   });
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-  // Merges: A1:L2
+  // Merges
   ws['!merges'] = [{s:{r:0,c:0}, e:{r:1,c:11}}];
 
-  // Column widths (exact match original)
+  // Column widths
   ws['!cols'] = [
-    {wch:5.3},{wch:7.4},{wch:8.1},{wch:51.9},
-    {wch:13.3},{wch:13.3},{wch:13.0},{wch:13.9},
-    {wch:11.0},{wch:13.0},{wch:13.3},{wch:12.9}
+    {wch:5},{wch:7},{wch:8},{wch:50},
+    {wch:13},{wch:12},{wch:13},{wch:13},
+    {wch:10},{wch:12},{wch:13},{wch:12}
   ];
 
-  // Row heights: row3=6pt spacer
-  ws['!rows'] = [
-    {},{},{hpt:6},{hpt:20},
-    ...chosen.map(()=>({hpt:15}))
-  ];
+  // Row heights
+  ws['!rows'] = [{hpt:22},{hpt:22},{hpt:6},{hpt:20},...chosen.map(()=>({hpt:15}))];
 
-  // ── Styles ──
-  const hair = {style:'hair',color:{rgb:'000000'}};
-  const hairBorder = {top:hair,bottom:hair,left:hair,right:hair};
-
-  const thin  = {style:'thin', color:{rgb:'000000'}};
-  const thinBorder = {top:thin,bottom:thin,left:thin,right:thin};
-
-  const titleStyle = {
-    font:{name:'Calibri',bold:true,sz:22},
-    alignment:{horizontal:'center',vertical:'center'}
-  };
-  const hdrStyle = {
-    font:{name:'Calibri',bold:true,sz:11},
-    alignment:{horizontal:'center',vertical:'center'},
-    border:thinBorder
-  };
-  const dataStyleC = {
-    font:{name:'Calibri',sz:11},
-    alignment:{horizontal:'center',vertical:'center'},
-    border:thinBorder
-  };
-  const dataStyleL = {
-    font:{name:'Calibri',sz:11},
-    alignment:{horizontal:'left',vertical:'center'},
-    border:thinBorder
-  };
-  const dataStyleR = {
-    font:{name:'Calibri',sz:11},
-    alignment:{horizontal:'right',vertical:'center'},
-    border:thinBorder,
-    numFmt:'"R$" #,##0.00'
-  };
-  const dataStylePct = {
-    font:{name:'Calibri',sz:11},
-    alignment:{horizontal:'right',vertical:'center'},
-    border:thinBorder,
-    numFmt:'0.00%'
-  };
-  const diasRedStyle = {
-    font:{name:'Calibri',sz:11,bold:true,color:{rgb:'CC0000'}},
-    alignment:{horizontal:'center',vertical:'center'},
-    border:thinBorder,
-    fill:{patternType:'solid',fgColor:{rgb:'FFCCCC'}}
-  };
-  const diasOrgStyle = {
-    font:{name:'Calibri',sz:11,bold:true,color:{rgb:'7C3800'}},
-    alignment:{horizontal:'center',vertical:'center'},
-    border:thinBorder,
-    fill:{patternType:'solid',fgColor:{rgb:'FFE5B4'}}
-  };
-
-  const cols = ['A','B','C','D','E','F','G','H','I','J','K','L'];
-
-  // Title
-  if(ws['A1']) ws['A1'].s = titleStyle;
-
-  // Header row 4 — centered, bold, thin border
-  cols.forEach(c=>{ const ref=c+'4'; if(ws[ref]) ws[ref].s=hdrStyle; });
-
-  // Data rows start at row 5
-  chosen.forEach((_,i)=>{
-    const r = i+5;
-    const isHighlighted = Number(p._qtd)>60 || String(p._desc).toUpperCase().includes(' KG');
-    const dataStyleHighlight = {
-      font:{name:'Calibri',sz:11,bold:true,color:{rgb:'D97706'}},
-      alignment:{horizontal:'left',vertical:'center'},
-      border:thinBorder,
-      fill:{patternType:'solid',fgColor:{rgb:'1C1400'}}
-    };
-    cols.forEach((c,ci)=>{
-      const ref=c+r;
-      if(!ws[ref]) return;
-      if(ci===3)       ws[ref].s = isHighlighted ? dataStyleHighlight : dataStyleL;
-      else if(ci===10) ws[ref].s = dataStyleR;
-      else if(ci===11) ws[ref].s = dataStylePct;
-      else             ws[ref].s = dataStyleC;
-    });
-    // DIAS VENC highlight
-    const diasVal = Number(aoa[i+4][8]);
-    const diasRef = 'I'+r;
-    if(ws[diasRef] && !isNaN(diasVal)){
-      if(diasVal<=3)      ws[diasRef].s = diasRedStyle;
-      else if(diasVal<=7) ws[diasRef].s = diasOrgStyle;
-    }
-  });
-
+  const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'BASE FIFO');
 
   const lojaNum = fifoData.length ? String(fifoData[0]._loja||'').trim() : '';
-  const exportName = lojaNum ? `PLANILHA FIFO ${lojaNum}.xlsx` : `PLANILHA FIFO ${today.getFullYear()}${p2(today.getMonth()+1)}${p2(today.getDate())}.xlsx`;
-  XLSX.writeFile(wb, exportName, {cellStyles:true});
+  const fname = lojaNum
+    ? `PLANILHA FIFO ${lojaNum}.xlsx`
+    : `PLANILHA FIFO ${today.getFullYear()}${p2(today.getMonth()+1)}${p2(today.getDate())}.xlsx`;
+
+  try {
+    XLSX.writeFile(wb, fname);
+  } catch(e) {
+    console.error('Export error:', e);
+    alert('Erro ao exportar: ' + e.message);
+  }
 }
 
 // ══════════════════════════════════════════

@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestor FIFO – Rebaixa</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+:root {
+  --bg:              #0d1117;
+  --bg2:             #161b22;
+  --bg3:             #0f1319;
+  --border:          #21262d;
+  --border2:         #30363d;
+  --text:            #e2e8f0;
+  --text2:           #8b949e;
+  --text3:           #6e7681;
+  --inp-bg:          #0d1117;
+  --inp-filled-bg:   #071e12;
+  --row-even:        #0f1319;
+  --row-hover:       #1c2128;
+  --sort-bg:         #0a0e14;
+  --hdr-bg:          #0d1117;
+  --found-bg:        #071e12;
+  --found-hover:     #0a2a18;
+  --notfound-bg:     #130d00;
+  --badge-ok-bg:     #0f2d1c;  --badge-ok-text:     #3fb950; --badge-ok-border:     #238636;
+  --badge-pend-bg:   #2d1b00;  --badge-pend-text:   #f0883e; --badge-pend-border:   #9e4f00;
+  --badge-match-bg:  #0a2535;  --badge-match-text:  #58a6ff; --badge-match-border:  #1e3a5f;
+  --badge-quebra-bg: #2d0f0f;  --badge-quebra-text: #f87171; --badge-quebra-border: #7f1d1d;
+  --badge-troca-bg:  #1a1f2e;  --badge-troca-text:  #93c5fd; --badge-troca-border:  #1e3a5f;
+  --badge-none-bg:   #1c1c1c;  --badge-none-text:   #6e7681; --badge-none-border:   #2d2d2d;
+  --err-bg:          #2d1515;  --err-text:          #f87171; --err-border:          #5e1f1f;
+}
+body.light {
+  --bg:              #f6f8fa;
+  --bg2:             #ffffff;
+  --bg3:             #f0f2f4;
+  --border:          #d0d7de;
+  --border2:         #b0bac5;
+  --text:            #1f2328;
+  --text2:           #57606a;
+  --text3:           #6c737a;
+  --inp-bg:          #ffffff;
+  --inp-filled-bg:   #dafbe1;
+  --row-even:        #f6f8fa;
+  --row-hover:       #ddf4ff;
+  --sort-bg:         #eaeef2;
+  --hdr-bg:          #f6f8fa;
+  --found-bg:        #dafbe1;
+  --found-hover:     #b6f0c8;
+  --notfound-bg:     #fff8e6;
+  --badge-ok-bg:     #dafbe1;  --badge-ok-text:     #1a7f37; --badge-ok-border:     #1a7f37;
+  --badge-pend-bg:   #fff1e0;  --badge-pend-text:   #953800; --badge-pend-border:   #d1810a;
+  --badge-match-bg:  #ddf4ff;  --badge-match-text:  #0969da; --badge-match-border:  #54aeff;
+  --badge-quebra-bg: #ffebe9;  --badge-quebra-text: #cf222e; --badge-quebra-border: #ff8182;
+  --badge-troca-bg:  #ddf4ff;  --badge-troca-text:  #0969da; --badge-troca-border:  #54aeff;
+  --badge-none-bg:   #f0f2f4;  --badge-none-text:   #57606a; --badge-none-border:   #b0bac5;
+  --err-bg:          #ffebe9;  --err-text:          #cf222e; --err-border:          #ff8182;
+}
+body { min-height:100vh; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; font-size:14px; transition:background .2s,color .2s; }
+
+header { background:var(--bg2); border-bottom:1px solid var(--border); padding:13px 24px; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:200; }
+.logo { width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#f97316,#b91c1c);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0; }
+.app-title { font-size:15px;font-weight:700;color:var(--text); }
+.app-sub   { font-size:11px;color:var(--text2);margin-top:1px; }
+
+.tabs { display:flex; border-bottom:1px solid var(--border); background:var(--bg2); padding:0 24px; overflow-x:auto; }
+.tab { padding:11px 18px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--text2);transition:.15s;display:flex;align-items:center;gap:6px;white-space:nowrap; }
+.tab.active { color:var(--text);border-bottom-color:#f97316; }
+.tab-badge { background:#f97316;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px; }
+.tab-badge-green { background:var(--badge-ok-border);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px; }
+
+.page { display:none; padding:20px 24px; }
+.page.active { display:block; }
+
+/* dropzone */
+.dropzone { border:2px dashed #30363d;border-radius:12px;padding:40px 28px;text-align:center;cursor:pointer;background:var(--bg2);transition:.2s; }
+.dropzone:hover,.dropzone.drag { border-color:#f97316;background:var(--row-hover); }
+.dz-icon  { font-size:38px;margin-bottom:10px; }
+.dz-title { font-size:15px;font-weight:600;color:var(--text);margin-bottom:5px; }
+.dz-sub   { font-size:12px;color:var(--text2);margin-bottom:16px; }
+.btn-primary { background:linear-gradient(135deg,#f97316,#b91c1c);color:#fff;border:none;padding:9px 22px;border-radius:7px;font-size:13px;font-weight:700;letter-spacing:.04em;cursor:pointer; }
+.loaded-box { margin-top:12px;padding:11px 16px;background:var(--badge-ok-bg);border:1px solid var(--badge-ok-border);border-radius:8px;color:var(--badge-ok-text);font-size:13px;display:flex;align-items:center;gap:8px; }
+.warn-box   { margin-top:12px;padding:11px 16px;background:var(--badge-pend-bg);border:1px solid var(--badge-pend-border);border-radius:8px;color:var(--badge-pend-text);font-size:13px; }
+.err-box    { margin-top:12px;padding:11px 16px;background:var(--err-bg);border:1px solid var(--err-border);border-radius:8px;color:var(--err-text);font-size:13px; }
+
+/* stats */
+.stats { display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap; }
+.stat { flex:1;min-width:105px;padding:11px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:9px; }
+.stat-lbl { font-size:10px;color:var(--text2);letter-spacing:.07em;margin-bottom:3px;text-transform:uppercase; }
+.stat-val { font-size:21px;font-weight:700; }
+
+.base-stats { display:flex;gap:10px;margin-top:14px;flex-wrap:wrap; }
+.bstat { flex:1;min-width:120px;padding:11px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:9px; }
+.bstat-lbl { font-size:10px;color:var(--text2);letter-spacing:.07em;margin-bottom:3px;text-transform:uppercase; }
+.bstat-val { font-size:19px;font-weight:700; }
+
+/* toolbar */
+.toolbar { display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap; }
+.filter-btn { padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);transition:.15s;white-space:nowrap; }
+.filter-btn.active { background:linear-gradient(135deg,#f97316,#b91c1c);color:#fff;border-color:transparent; }
+.btn-sm { padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;white-space:nowrap; }
+.ml-auto { margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center; }
+.search-box { padding:6px 11px;border-radius:7px;border:1px solid var(--border2);background:var(--bg);color:var(--text);font-size:12px;width:185px; }
+.search-box:focus { outline:none;border-color:#58a6ff; }
+
+/* tables */
+.table-wrap { background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden; }
+.t-body { max-height:450px;overflow-y:auto; }
+.t-body::-webkit-scrollbar { width:5px; }
+.t-body::-webkit-scrollbar-track { background:var(--bg); }
+.t-body::-webkit-scrollbar-thumb { background:var(--border2);border-radius:3px; }
+
+/* FIFO grid: cb loja plu desc venc dias qtd avaria | bPreco bVal bData | preco margem status */
+.th-f,.tr-f {
+  display:grid;
+  grid-template-columns: 32px 44px 68px 1fr 96px 44px 44px 72px  98px 96px 106px  86px 74px 86px;
+  padding:8px 12px; align-items:center; gap:2px;
+}
+/* Principal preview grid: plu desc comprador status quebra */
+.th-p,.tr-p {
+  display:grid;
+  grid-template-columns: 72px 1fr 200px 90px 120px;
+  padding:8px 12px; align-items:center;
+}
+/* Base verif grid */
+.th-b,.tr-b {
+  display:grid;
+  grid-template-columns: 68px 1fr 62px 100px 44px 96px 106px 78px;
+  padding:8px 12px; align-items:center;
+}
+.th-f,.th-p,.th-b { background:var(--bg);border-bottom:1px solid var(--border);font-size:10px;color:var(--text3);letter-spacing:.08em;font-weight:700; }
+.tr-f,.tr-p,.tr-b { border-bottom:1px solid var(--border);font-size:12px;transition:background .1s; }
+.tr-f:nth-child(even),.tr-p:nth-child(even),.tr-b:nth-child(even) { background:var(--row-even); }
+.tr-f:hover,.tr-p:hover,.tr-b:hover { background:var(--row-hover); }
+
+/* row highlight states */
+.tr-f.base-found   { background:var(--found-bg)!important; }
+.tr-f.base-found:hover { background:var(--found-hover)!important; }
+.tr-f.base-notfound { background:var(--notfound-bg)!important; }
+
+.cell-desc { color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.mono { font-family:monospace;color:var(--text2);font-size:11px; }
+.sep-col { border-left:2px solid #30363d;padding-left:8px; }
+
+.badge { display:inline-flex;align-items:center;gap:2px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap; }
+.badge-ok     { background:var(--badge-ok-bg);color:var(--badge-ok-text);border:1px solid var(--badge-ok-border); }
+.badge-pend   { background:var(--badge-pend-bg);color:var(--badge-pend-text);border:1px solid var(--badge-pend-border); }
+.badge-match  { background:#0a2535;color:#58a6ff;border:1px solid #1f4e79; }
+.badge-quebra { background:var(--badge-quebra-bg);color:var(--badge-quebra-text);border:1px solid var(--badge-quebra-border); }
+.badge-troca  { background:var(--badge-troca-bg);color:var(--badge-troca-text);border:1px solid var(--badge-troca-border); }
+.badge-naotrata { background:#1c1c1c;color:var(--text3);border:1px solid #2d2d2d; }
+
+.inp { width:78px;padding:4px 6px;border-radius:5px;border:1px solid var(--border2);background:var(--bg);color:var(--text);font-size:12px;font-family:monospace; }
+.inp:focus { outline:none;border-color:#f97316; }
+.inp.filled { border-color:var(--badge-ok-border);background:var(--inp-filled-bg); }
+
+/* action bar */
+.action-bar { margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap; }
+.fname { flex:1;font-size:12px;color:var(--text3); }
+.btn-export { padding:9px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none;letter-spacing:.05em;background:linear-gradient(135deg,#f97316,#b91c1c);color:#fff; }
+.btn-export:disabled { background:#21262d;color:var(--text3);cursor:not-allowed; }
+.btn-back { padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:var(--bg2);color:var(--text2); }
+.rev-err { font-size:12px;color:#f87171; }
+.empty { padding:36px;text-align:center;color:var(--text3); }
+.sort-row { display:grid; grid-template-columns: 32px 44px 68px 1fr 96px 44px 44px 72px  98px 96px 106px  86px 74px 86px; padding:4px 12px; align-items:center; gap:2px; background:var(--sort-bg); border-bottom:1px solid var(--border); }
+.sort-cell { display:flex; align-items:center; gap:3px; }
+.sort-btn { background:none; border:none; cursor:pointer; color:var(--text3); font-size:10px; padding:2px 3px; border-radius:3px; transition:.15s; display:flex; align-items:center; gap:1px; }
+.sort-btn:hover { background:#21262d; color:var(--text); }
+.sort-btn.asc, .sort-btn.desc { color:#f97316; }
+.filter-mini { background:var(--bg); border:1px solid var(--border2); border-radius:4px; color:var(--text); font-size:11px; padding:2px 5px; width:100%; min-width:0; }
+.filter-mini:focus { outline:none; border-color:#f97316; }
+select.filter-mini { cursor:pointer; }
+.sec-div { display:flex;align-items:center;gap:8px;margin:16px 0 10px;font-size:10px;color:var(--text3);letter-spacing:.1em;font-weight:700;text-transform:uppercase; }
+.sec-div::before,.sec-div::after { content:'';flex:1;border-top:1px solid var(--border); }
+
+/* principal not loaded warning banner */
+.banner { display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--badge-pend-bg);border:1px solid var(--badge-pend-border);border-radius:8px;font-size:12px;color:var(--badge-pend-text);margin-bottom:14px; }
+.banner button { padding:5px 12px;border-radius:6px;background:#f97316;color:#fff;border:none;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⏱</div>
+  <div>
+    <div class="app-title">GESTOR FIFO – REBAIXA</div>
+    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO</div>
+  </div>
+  <button id="theme-toggle" onclick="toggleTheme()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><span id="theme-icon">☀</span> <span id="theme-label">Tema Claro</span></button>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="goTab('fifo',this)">📋 Planilha FIFO</div>
+  <div class="tab" onclick="goTab('principal',this)" id="tab-principal">
+    📦 Base Principal
+    <span class="tab-badge-green" id="principal-badge" style="display:none">0</span>
+  </div>
+  <div class="tab" onclick="goTab('base',this)" id="tab-base">
+    🗄️ Base de Verificação
+    <span class="tab-badge" id="base-badge" style="display:none">0</span>
+  </div>
+</div>
+
+<!-- ══════════════ ABA FIFO ══════════════ -->
+<div class="page active" id="page-fifo">
+
+  <div id="fifo-upload" style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 140px)">
+    <div style="max-width:520px;width:100%">
+      <div id="banner-principal" class="banner" style="display:none">
+        ⚠️ <span>Base Principal não carregada — descrições e tipo de avaria virão da planilha FIFO.</span>
+        <button onclick="goTab('principal',document.querySelectorAll('.tab')[1])">Carregar agora</button>
+      </div>
+      <div class="dropzone" id="dz-fifo" onclick="document.getElementById('fi-fifo').click()"
+        ondragover="dzOver(event,'dz-fifo')" ondragleave="dzOut('dz-fifo')" ondrop="dzDrop(event,'fifo')">
+        <div class="dz-icon">📂</div>
+        <div class="dz-title">Importar Planilha FIFO</div>
+        <div class="dz-sub">Arquivo .xlsx — aba <strong>BASE FIFO</strong> reconhecida automaticamente</div>
+        <button class="btn-primary" onclick="event.stopPropagation();document.getElementById('fi-fifo').click()">SELECIONAR ARQUIVO</button>
+      </div>
+      <input type="file" id="fi-fifo" accept=".xlsx,.xls" style="display:none" onchange="loadFifo(this.files[0])">
+      <div id="fifo-err"></div>
+    </div>
+  </div>
+
+  <div id="fifo-review" style="display:none">
+    <div class="stats">
+      <div class="stat"><div class="stat-lbl">TOTAL</div><div class="stat-val" id="s-tot" style="color:#58a6ff">0</div></div>
+      <div class="stat"><div class="stat-lbl">JÁ EM REBAIXA</div><div class="stat-val" id="s-rbx" style="color:#3fb950">0</div></div>
+      <div class="stat"><div class="stat-lbl">PENDENTES</div><div class="stat-val" id="s-pen" style="color:#f0883e">0</div></div>
+      <div class="stat"><div class="stat-lbl">NA BASE VERIF.</div><div class="stat-val" id="s-base" style="color:#58a6ff">0</div></div>
+      <div class="stat"><div class="stat-lbl">QUEBRA</div><div class="stat-val" id="s-quebra" style="color:#f87171">0</div></div>
+      <div class="stat"><div class="stat-lbl">SELECIONADOS</div><div class="stat-val" id="s-sel" style="color:#f59e0b">0</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="filter-btn active" onclick="setFifoFilter('todos',this)">Todos</button>
+        <button class="filter-btn" onclick="setFifoFilter('pendente',this)">Pendentes</button>
+        <button class="filter-btn" onclick="setFifoFilter('rebaixa',this)">Já em Rebaixa</button>
+        <button class="filter-btn" onclick="setFifoFilter('nabase',this)">✓ Na Base</button>
+        <button class="filter-btn" onclick="setFifoFilter('sembase',this)">Sem Base</button>
+        <button class="filter-btn" onclick="setFifoFilter('quebra',this)" style="border-color:#7f1d1d">🔴 Quebra</button>
+        <button class="filter-btn" onclick="setFifoFilter('troca',this)">🔵 Troca</button>
+      </div>
+      <div class="ml-auto">
+        <input class="search-box" type="text" placeholder="🔍 Buscar produto / PLU…" oninput="fifoSearch=this.value;renderFifo()">
+        <button class="btn-sm" style="background:#112240;color:#58a6ff" onclick="selAllPend()">✓ Sel. Pendentes</button>
+        <button class="btn-sm" style="background:#2d1515;color:#f87171" onclick="clearSel()">✗ Limpar</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="th-f">
+        <span style="text-align:center"><input type="checkbox" id="cb-all" title="Marcar/Desmarcar todos" onchange="toggleAll(this.checked)" style="width:15px;height:15px;accent-color:#f97316;cursor:pointer"></span>
+        <span>LOJA</span>
+        <span>PLU</span>
+        <span>DESCRIÇÃO</span>
+        <span>VENCIMENTO</span>
+        <span>DIAS</span>
+        <span>QTD</span>
+        <span>AVARIA</span>
+        <span class="sep-col" style="color:#58a6ff">💰 PREÇO BASE</span>
+        <span style="color:#58a6ff">📅 VAL. BASE</span>
+        <span style="color:#58a6ff">🕐 DATA FEITA</span>
+        <span>PREÇO VENDA</span>
+        <span>MARGEM%</span>
+        <span>STATUS</span>
+      </div>
+      <div class="sort-row" id="sort-row">
+        <span></span>
+        <div class="sort-cell"><button class="sort-btn" onclick="sortBy('loja',this)" title="Ordenar Loja">LOJA <span class="sort-icon">↕</span></button></div>
+        <div class="sort-cell"><button class="sort-btn" onclick="sortBy('plu',this)" title="Ordenar PLU">PLU <span class="sort-icon">↕</span></button></div>
+        <div class="sort-cell"><input class="filter-mini" type="text" placeholder="🔍 Descrição…" oninput="setColFilter('desc',this.value)" style="width:100%"></div>
+        <span></span>
+        <div class="sort-cell"><button class="sort-btn" onclick="sortBy('dias',this)" title="Ordenar Dias">DIAS <span class="sort-icon">↕</span></button></div>
+        <div class="sort-cell"><button class="sort-btn" onclick="sortBy('qtd',this)" title="Ordenar Qtd">QTD <span class="sort-icon">↕</span></button></div>
+        <div class="sort-cell">
+          <select class="filter-mini" onchange="setColFilter('avaria',this.value)">
+            <option value="">Todos</option>
+            <option value="QUEBRA">Quebra</option>
+            <option value="TROCA">Troca</option>
+          </select>
+        </div>
+        <span></span><span></span><span></span>
+        <span></span><span></span>
+        <div class="sort-cell">
+          <select class="filter-mini" onchange="setColFilter('status',this.value)">
+            <option value="">Todos</option>
+            <option value="pendente">Pendentes</option>
+            <option value="rebaixa">Em Rebaixa</option>
+            <option value="nabase">Na Base</option>
+          </select>
+        </div>
+      </div>
+      <div class="t-body" id="fifo-body"></div>
+    </div>
+
+    <div class="action-bar">
+      <button class="btn-back" onclick="resetFifo()">← Nova Planilha</button>
+      <div class="fname" id="fifo-fname"></div>
+      <div class="rev-err" id="fifo-rev-err"></div>
+      <button class="btn-export" id="btn-exp" onclick="exportarFifo()" disabled>⬇ EXPORTAR SELECIONADOS (.xlsx)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ ABA BASE PRINCIPAL ══════════════ -->
+<div class="page" id="page-principal">
+  <div style="max-width:660px;margin:0 auto">
+    <div class="dropzone" id="dz-principal" onclick="document.getElementById('fi-principal').click()"
+      ondragover="dzOver(event,'dz-principal')" ondragleave="dzOut('dz-principal')" ondrop="dzDrop(event,'principal')">
+      <div class="dz-icon">📦</div>
+      <div class="dz-title">Importar Base Principal</div>
+      <div class="dz-sub">Fonte de verdade para <strong>Descrição do produto</strong> e <strong>Tipo de Avaria</strong> (QUEBRA / TROCA / NÃO TRATA)</div>
+      <button class="btn-primary" onclick="event.stopPropagation();document.getElementById('fi-principal').click()">SELECIONAR ARQUIVO</button>
+    </div>
+    <input type="file" id="fi-principal" accept=".xlsx,.xls" style="display:none" onchange="loadPrincipal(this.files[0])">
+    <div id="principal-err"></div>
+
+    <div id="principal-loaded" style="display:none">
+      <div class="loaded-box">✅ Base Principal carregada: <strong id="principal-fname2"></strong></div>
+      <div class="base-stats">
+        <div class="bstat"><div class="bstat-lbl">PRODUTOS</div><div class="bstat-val" id="p-total" style="color:#3fb950">0</div></div>
+        <div class="bstat"><div class="bstat-lbl">QUEBRA</div><div class="bstat-val" id="p-quebra" style="color:#f87171">0</div></div>
+        <div class="bstat"><div class="bstat-lbl">TROCA</div><div class="bstat-val" id="p-troca" style="color:#93c5fd">0</div></div>
+        <div class="bstat"><div class="bstat-lbl">NÃO TRATA</div><div class="bstat-val" id="p-naotrata" style="color:var(--text3)">0</div></div>
+      </div>
+    </div>
+
+    <div id="principal-preview" style="display:none">
+      <div class="sec-div">Prévia da Base Principal</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input class="search-box" type="text" placeholder="🔍 Buscar PLU ou descrição…" oninput="filterPrincipal(this.value)" style="width:250px">
+        <span id="p-cnt" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+      <div class="table-wrap">
+        <div class="th-p">
+          <span>PLU</span><span>DESCRIÇÃO</span><span>COMPRADOR</span>
+          <span>STATUS VENDA</span><span>QUEBRA / TROCA</span>
+        </div>
+        <div class="t-body" id="principal-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ ABA BASE VERIFICAÇÃO ══════════════ -->
+<div class="page" id="page-base">
+  <div style="max-width:660px;margin:0 auto">
+    <div class="dropzone" id="dz-base" onclick="document.getElementById('fi-base').click()"
+      ondragover="dzOver(event,'dz-base')" ondragleave="dzOut('dz-base')" ondrop="dzDrop(event,'base')">
+      <div class="dz-icon">🗄️</div>
+      <div class="dz-title">Importar Base de Verificação</div>
+      <div class="dz-sub">Atualizada diariamente · PLU · Preço de Rebaixa · Validade · Data Feita · Loja</div>
+      <button class="btn-primary" onclick="event.stopPropagation();document.getElementById('fi-base').click()">SELECIONAR ARQUIVO</button>
+    </div>
+    <input type="file" id="fi-base" accept=".xlsx,.xls" style="display:none" onchange="loadBase(this.files[0])">
+    <div id="base-err"></div>
+
+    <div id="base-loaded" style="display:none">
+      <div class="loaded-box">✅ Base de Verificação carregada: <strong id="base-fname2"></strong></div>
+      <div class="base-stats">
+        <div class="bstat"><div class="bstat-lbl">REGISTROS</div><div class="bstat-val" id="b-total" style="color:#58a6ff">0</div></div>
+        <div class="bstat"><div class="bstat-lbl">PLUs ÚNICOS</div><div class="bstat-val" id="b-plus" style="color:#f0883e">0</div></div>
+        <div class="bstat"><div class="bstat-lbl">ÚLTIMA DATA FEITA</div><div class="bstat-val" id="b-last" style="font-size:14px;color:var(--text2)">—</div></div>
+      </div>
+    </div>
+
+    <div id="base-preview" style="display:none">
+      <div class="sec-div">Prévia da Base de Verificação</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input class="search-box" type="text" placeholder="🔍 Buscar PLU ou produto…" oninput="filterBase(this.value)" style="width:250px">
+        <span id="b-cnt" style="font-size:12px;color:var(--text3)"></span>
+      </div>
+      <div class="table-wrap">
+        <div class="th-b">
+          <span>PLU</span><span>DESCRIÇÃO</span><span>UNID.</span>
+          <span>PREÇO REBAIXA</span><span>QTD</span>
+          <span>VALIDADE</span><span>DATA FEITA</span><span>LOJA</span>
+        </div>
+        <div class="t-body" id="base-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let principalMap = {};   // plu -> {desc, comprador, statusVenda, avaria}
+let principalLoaded = false;
+
+let baseData = [];
+let baseMap  = {};       // plu -> [registros]
+
+let fifoData    = [];
+let fifoHeaders = [];
+let selection   = {};
+let prices      = {};
+let margins     = {};
+let fifoFilter  = 'todos';
+let fifoSearch  = '';
+let sortKey     = '';
+let sortDir     = 1;   // 1=asc, -1=desc
+let colFilters  = {};  // {desc:'', avaria:'', status:''}
+
+// ══════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════
+function goTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('page-'+name).classList.add('active');
+}
+
+// ══════════════════════════════════════════
+//  DRAG & DROP
+// ══════════════════════════════════════════
+function dzOver(e,id){e.preventDefault();document.getElementById(id).classList.add('drag');}
+function dzOut(id){document.getElementById(id).classList.remove('drag');}
+function dzDrop(e,t){e.preventDefault();dzOut('dz-'+t);const f=e.dataTransfer.files[0];if(!f)return;if(t==='fifo')loadFifo(f);else if(t==='principal')loadPrincipal(f);else loadBase(f);}
+
+// ══════════════════════════════════════════
+//  BASE PRINCIPAL
+// ══════════════════════════════════════════
+function loadPrincipal(file) {
+  setErr('principal','');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+      // detect header row
+      let hi = 0;
+      for(let i=0;i<Math.min(rows.length,5);i++){
+        if(String(rows[i][0]).toUpperCase().trim()==='PLU'){hi=i;break;}
+      }
+
+      principalMap = {};
+      let quebra=0, troca=0, naoTrata=0;
+
+      for(let i=hi+1;i<rows.length;i++){
+        const r = rows[i];
+        const pluRaw = r[0]; if(pluRaw===null||pluRaw===undefined||String(pluRaw).trim()==='') continue;
+        const plu = String(typeof pluRaw==='number' ? Math.floor(pluRaw) : pluRaw).trim();
+        const avaria = String(r[4]??'').trim().toUpperCase();
+        const entry = {
+          desc:     String(r[1]??'').trim(),
+          comprador:String(r[2]??'').trim(),
+          statusVenda: String(r[3]??'').trim(),
+          avaria:   avaria,
+        };
+        // store under both raw and normalized key so any PLU format matches
+        const pluNorm = normPlu(plu);
+        principalMap[plu]     = entry;
+        principalMap[pluNorm] = entry;
+        if(avaria==='QUEBRA') quebra++;
+        else if(avaria==='TROCA') troca++;
+        else naoTrata++;
+      }
+
+      principalLoaded = true;
+      const total = Object.keys(principalMap).length;
+
+      document.getElementById('p-total').textContent   = total;
+      document.getElementById('p-quebra').textContent  = quebra;
+      document.getElementById('p-troca').textContent   = troca;
+      document.getElementById('p-naotrata').textContent= naoTrata;
+      document.getElementById('principal-fname2').textContent = file.name;
+      document.getElementById('principal-loaded').style.display = 'block';
+      document.getElementById('principal-preview').style.display = 'block';
+      document.getElementById('principal-badge').style.display = 'inline';
+      document.getElementById('principal-badge').textContent = total;
+
+      // hide warning banner if visible
+      const banner = document.getElementById('banner-principal');
+      if(banner) banner.style.display='none';
+
+      renderPrincipalTable(Object.entries(principalMap).map(([plu,v])=>({plu,...v})));
+      if(fifoData.length){
+        fifoData.forEach(p=>{
+          // PROCV direto: PLU ja esta normalizado em p._plu
+          const rec = principalMap[p._plu] || principalMap[normPlu(p._plu)];
+          if(rec){
+            if(rec.desc)   p._desc   = rec.desc;
+            if(rec.avaria) p._avaria = rec.avaria;
+          }
+        });
+        renderFifo();
+      }
+    } catch(err){ setErr('principal','Erro: '+err.message); console.error(err); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function filterPrincipal(q){
+  const lq=q.toLowerCase();
+  const all=Object.entries(principalMap).map(([plu,v])=>({plu,...v}));
+  const f=q?all.filter(r=>String(r.plu).includes(q)||r.desc.toLowerCase().includes(lq)):all;
+  document.getElementById('p-cnt').textContent=`${f.length} de ${all.length}`;
+  renderPrincipalTable(f);
+}
+
+function renderPrincipalTable(rows){
+  const body=document.getElementById('principal-body');
+  if(!rows.length){body.innerHTML='<div class="empty">Nenhum registro.</div>';return;}
+  document.getElementById('p-cnt').textContent=`${rows.length} registros`;
+  body.innerHTML=rows.slice(0,500).map(r=>{
+    const av=String(r.avaria??'').toUpperCase();
+    let avBadge;
+    if(av==='QUEBRA')      avBadge='<span class="badge badge-quebra">🔴 QUEBRA</span>';
+    else if(av==='TROCA')  avBadge='<span class="badge badge-troca">🔵 TROCA</span>';
+    else                   avBadge=`<span class="badge badge-naotrata">${esc(r.avaria)||'—'}</span>`;
+    return `<div class="tr-p">
+      <span style="font-family:monospace;font-size:11px;color:#f97316">${esc(r.plu)}</span>
+      <span class="cell-desc" title="${esc(r.desc)}">${esc(r.desc)}</span>
+      <span style="font-size:11px;color:var(--text2)">${esc(r.comprador)}</span>
+      <span style="font-size:11px;color:${r.statusVenda==='ATIVO'?'#3fb950':'#6e7681'}">${esc(r.statusVenda)}</span>
+      <span>${avBadge}</span>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+//  BASE VERIFICAÇÃO
+// ══════════════════════════════════════════
+function loadBase(file) {
+  setErr('base','');
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      let start=0;
+      if(isNaN(Number(rows[0][0]))&&String(rows[0][0]).trim()!=='') start=1;
+      baseData=[]; baseMap={};
+      for(let i=start;i<rows.length;i++){
+        const r=rows[i];
+        const plu=String(r[0]??'').trim();
+        if(!plu||plu==='') continue;
+        const rec={plu,desc:String(r[1]??'').trim(),unid:String(r[2]??'').trim(),
+          preco:r[3]??'',validade:r[4]??'',qtd:r[5]??'',
+          usuario:String(r[6]??'').trim(),dataFeita:r[7]??'',loja:String(r[8]??'').trim()};
+        baseData.push(rec);
+        if(!baseMap[normPlu(plu)]) baseMap[normPlu(plu)]=[];
+        baseMap[normPlu(plu)].push(rec);
+      }
+      const uniquePLUs=Object.keys(baseMap).length;
+      const dates=baseData.map(r=>r.dataFeita).map(d=>d instanceof Date?d:new Date(d)).filter(d=>!isNaN(d));
+      const lastDate=dates.length?new Date(Math.max(...dates)):null;
+      document.getElementById('b-total').textContent=baseData.length;
+      document.getElementById('b-plus').textContent=uniquePLUs;
+      document.getElementById('b-last').textContent=lastDate?fmtDate(lastDate):'—';
+      document.getElementById('base-fname2').textContent=file.name;
+      document.getElementById('base-loaded').style.display='block';
+      document.getElementById('base-preview').style.display='block';
+      document.getElementById('base-badge').style.display='inline';
+      document.getElementById('base-badge').textContent=baseData.length;
+      renderBaseTable(baseData);
+      if(fifoData.length) renderFifo();
+    }catch(err){setErr('base','Erro: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function filterBase(q){
+  const lq=q.toLowerCase();
+  const f=q?baseData.filter(r=>String(r.plu).includes(q)||r.desc.toLowerCase().includes(lq)||r.loja.toLowerCase().includes(lq)):baseData;
+  document.getElementById('b-cnt').textContent=`${f.length} de ${baseData.length}`;
+  renderBaseTable(f);
+}
+
+function renderBaseTable(rows){
+  const body=document.getElementById('base-body');
+  if(!rows.length){body.innerHTML='<div class="empty">Nenhum registro.</div>';return;}
+  document.getElementById('b-cnt').textContent=`${rows.length} registros`;
+  body.innerHTML=rows.slice(0,500).map(r=>`
+    <div class="tr-b">
+      <span style="font-family:monospace;font-size:11px;color:#f97316">${esc(r.plu)}</span>
+      <span class="cell-desc" title="${esc(r.desc)}">${esc(r.desc)}</span>
+      <span class="mono">${esc(r.unid)}</span>
+      <span style="color:#3fb950;font-family:monospace;font-weight:700">R$ ${fmtPreco(r.preco)}</span>
+      <span class="mono">${esc(r.qtd)}</span>
+      <span style="font-family:monospace;font-size:11px;color:#f97316">${fmtDate(r.validade)}</span>
+      <span class="mono">${fmtDate(r.dataFeita)}</span>
+      <span class="mono">${esc(r.loja)}</span>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════
+//  FIFO
+// ══════════════════════════════════════════
+function loadFifo(file){
+  setErr('fifo','');
+  document.getElementById('fifo-fname').textContent='📄 '+file.name;
+
+  // show banner if principal not loaded
+  const banner=document.getElementById('banner-principal');
+  if(!principalLoaded && banner) banner.style.display='flex';
+
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const sn=wb.SheetNames.find(s=>s.toUpperCase().includes('BASE')||s.toUpperCase().includes('FIFO'))||wb.SheetNames[0];
+      const ws=wb.Sheets[sn];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+
+      let hi=-1;
+      for(let i=0;i<Math.min(raw.length,10);i++){
+        const r=raw[i].map(c=>String(c).toUpperCase().trim());
+        if(r.some(c=>c==='PLU'||c==='DESCRIÇÃO'||c==='DESCRICAO')){hi=i;break;}
+      }
+      if(hi<0){setErr('fifo','Cabeçalho PLU/DESCRIÇÃO não encontrado.');return;}
+
+      fifoHeaders=raw[hi].map(String);
+      const rawRows=raw.slice(hi+1);
+
+      const ci=keys=>fifoHeaders.findIndex(h=>keys.some(k=>norm(h).includes(k)));
+      const idx={
+        loja:  ci(['loja']),
+        plu:   ci(['plu']),
+        desc:  ci(['descricao','descri','descr','produto','nome','desc']),
+        avaria:ci(['avaria']),
+        diaf:  ci(['diafeito']),
+        venc:  ci(['vencimento','validade']),
+        dias:  ci(['diasvenc']),
+        qtd:   ci(['quantvenc','quantid','qtd','quant']),
+        preco: ci(['precovenda','preco']),
+        margem:ci(['margem']),
+      };
+
+      fifoData=rawRows.map((row,i)=>{
+        // PLU: converte float (25928.0) para inteiro string "25928"
+        const pluRaw = get(row, idx.plu);
+        const plu = String(typeof pluRaw==='number' ? Math.floor(pluRaw) : pluRaw).trim().replace(/\.0$/, '');
+
+        // PROCV: busca PLU na Base Principal -> desc e avaria
+        const princRec = principalMap[plu] || principalMap[normPlu(plu)];
+        const desc   = princRec ? princRec.desc   : '(sem cadastro)';
+        const avaria = princRec ? princRec.avaria  : String(get(row,idx.avaria)??'').trim();
+
+        return {
+          _id:i, _loja:get(row,idx.loja), _plu:plu,
+          _desc:desc, _avaria:avaria,
+          _venc:get(row,idx.venc), _dias:get(row,idx.dias), _qtd:get(row,idx.qtd),
+          _preco:get(row,idx.preco), _margem:get(row,idx.margem),
+          _diafeito:get(row,idx.diaf),
+          _rebaixa:!!(get(row,idx.diaf)&&String(get(row,idx.diaf)).trim()!==''),
+          _raw:row, _idx:idx,
+        };
+      }).filter(p=>{
+        const plu=String(p._plu).trim();
+        if(!plu||isNaN(Number(plu))||Number(plu)<=0) return false;
+        const temVenc=p._venc!==null&&p._venc!==undefined&&String(p._venc).trim()!=='';
+        const temDias=p._dias!==null&&p._dias!==undefined&&String(p._dias).trim()!=='';
+        const temQtd =p._qtd !==null&&p._qtd !==undefined&&String(p._qtd).trim()!==''&&String(p._qtd)!=='0';
+        return temVenc||temDias||temQtd;
+      });
+
+      selection={}; prices={}; margins={};
+      fifoData.forEach(p=>{
+        if(!p._rebaixa) selection[p._id]=true;
+        prices[p._id] =p._preco &&p._preco !==0?String(p._preco):'';
+        margins[p._id]=p._margem&&p._margem!==0?String(p._margem):'';
+      });
+
+      document.getElementById('fifo-upload').style.display='none';
+      document.getElementById('fifo-review').style.display='block';
+      renderFifo();
+    }catch(err){setErr('fifo','Erro: '+err.message);console.error(err);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function getVerifMatch(plu){
+  const recs=baseMap[normPlu(plu)];
+  if(!recs||!recs.length) return null;
+  return recs.slice().sort((a,b)=>{
+    const da=a.dataFeita instanceof Date?a.dataFeita:new Date(a.dataFeita||0);
+    const db=b.dataFeita instanceof Date?b.dataFeita:new Date(b.dataFeita||0);
+    return db-da;
+  })[0];
+}
+
+function sortBy(key, btn){
+  if(sortKey===key){ sortDir*=-1; }
+  else { sortKey=key; sortDir=1; }
+  // update button states
+  document.querySelectorAll('.sort-btn').forEach(b=>{ b.classList.remove('asc','desc'); b.querySelector('.sort-icon').textContent='↕'; });
+  if(btn){ btn.classList.add(sortDir===1?'asc':'desc'); btn.querySelector('.sort-icon').textContent=sortDir===1?'↑':'↓'; }
+  renderFifo();
+}
+
+function setColFilter(key, val){
+  colFilters[key] = val;
+  renderFifo();
+}
+
+function getVisible(){
+  let arr=fifoData;
+  if(fifoFilter==='rebaixa')  arr=arr.filter(p=>p._rebaixa);
+  if(fifoFilter==='pendente') arr=arr.filter(p=>!p._rebaixa);
+  if(fifoFilter==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu));
+  if(fifoFilter==='sembase')  arr=arr.filter(p=>!getVerifMatch(p._plu));
+  if(fifoFilter==='quebra')   arr=arr.filter(p=>String(p._avaria).toUpperCase()==='QUEBRA');
+  if(fifoFilter==='troca')    arr=arr.filter(p=>String(p._avaria).toUpperCase()==='TROCA');
+  if(fifoSearch){
+    const q=fifoSearch.toLowerCase();
+    arr=arr.filter(p=>String(p._plu).includes(fifoSearch)||String(p._desc).toLowerCase().includes(q));
+  }
+  // column filters
+  if(colFilters.desc)   { const q=colFilters.desc.toLowerCase(); arr=arr.filter(p=>String(p._desc).toLowerCase().includes(q)); }
+  if(colFilters.avaria) arr=arr.filter(p=>String(p._avaria).toUpperCase()===colFilters.avaria.toUpperCase());
+  if(colFilters.status){
+    if(colFilters.status==='pendente') arr=arr.filter(p=>!p._rebaixa);
+    if(colFilters.status==='rebaixa')  arr=arr.filter(p=>p._rebaixa);
+    if(colFilters.status==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu));
+  }
+  // sorting
+  if(sortKey){
+    arr=[...arr].sort((a,b)=>{
+      let va, vb;
+      if(sortKey==='loja') { va=Number(a._loja)||0; vb=Number(b._loja)||0; }
+      else if(sortKey==='plu')  { va=Number(a._plu)||0;  vb=Number(b._plu)||0; }
+      else if(sortKey==='dias') { va=Number(a._dias)||0; vb=Number(b._dias)||0; }
+      else if(sortKey==='qtd')  { va=Number(a._qtd)||0;  vb=Number(b._qtd)||0; }
+      else { va=String(a['_'+sortKey]||'').toLowerCase(); vb=String(b['_'+sortKey]||'').toLowerCase(); }
+      if(va<vb) return -1*sortDir;
+      if(va>vb) return  1*sortDir;
+      return 0;
+    });
+  }
+  return arr;
+}
+
+function renderFifo(){
+  const total =fifoData.length;
+  const emRbx =fifoData.filter(p=>p._rebaixa).length;
+  const pend  =fifoData.filter(p=>!p._rebaixa).length;
+  const naBase=fifoData.filter(p=>!!getVerifMatch(p._plu)).length;
+  const quebra=fifoData.filter(p=>String(p._avaria).toUpperCase()==='QUEBRA').length;
+  const sel   =Object.values(selection).filter(Boolean).length;
+
+  document.getElementById('s-tot').textContent   =total;
+  document.getElementById('s-rbx').textContent   =emRbx;
+  document.getElementById('s-pen').textContent   =pend;
+  document.getElementById('s-base').textContent  =naBase;
+  document.getElementById('s-quebra').textContent=quebra;
+  document.getElementById('s-sel').textContent   =sel;
+
+  const btn=document.getElementById('btn-exp');
+  btn.disabled=sel===0;
+  btn.textContent=sel>0?`⬇ EXPORTAR (${sel}) SELECIONADOS (.xlsx)`:'⬇ EXPORTAR SELECIONADOS (.xlsx)';
+
+  const cbAll=document.getElementById('cb-all');
+  if(cbAll){
+    const pv=getVisible().filter(p=>!p._rebaixa);
+    cbAll.checked=pv.length>0&&pv.every(p=>selection[p._id]);
+    cbAll.indeterminate=!cbAll.checked&&pv.some(p=>selection[p._id]);
+  }
+
+  const visible=getVisible();
+  const body=document.getElementById('fifo-body');
+  if(!visible.length){body.innerHTML='<div class="empty">Nenhum produto neste filtro.</div>';return;}
+
+  body.innerHTML=visible.map(p=>{
+    const match=getVerifMatch(p._plu);
+    const diasN=Number(p._dias);
+    const dColor=!isNaN(diasN)?(diasN<=3?'var(--badge-quebra-text)':diasN<=7?'var(--badge-pend-text)':'var(--text)'):'var(--text)';
+    const pv=prices[p._id]??'';
+    const mg=margins[p._id]??'';
+    const av=String(p._avaria).toUpperCase();
+
+    // avaria badge
+    let avBadge;
+    if(av==='QUEBRA')     avBadge='<span style="color:var(--badge-quebra-text);font-weight:700;font-size:11px">🔴 QUEBRA</span>';
+    else if(av==='TROCA') avBadge='<span style="color:var(--badge-troca-text);font-size:11px">🔵 TROCA</span>';
+    else if(av)           avBadge=`<span style="color:var(--text3);font-size:11px">${esc(p._avaria)}</span>`;
+    else                  avBadge='<span style="color:var(--text3)">—</span>';
+
+    // base verif cols
+    let bPreco='<span style="color:var(--text3)">—</span>';
+    let bVal  ='<span style="color:var(--text3)">—</span>';
+    let bData ='<span style="color:var(--text3)">—</span>';
+    let rowCls='';
+    if(match){
+      bPreco=`<span style="color:var(--badge-ok-text);font-weight:700;font-family:monospace">R$ ${fmtPreco(match.preco)}</span>`;
+      bVal  =`<span style="color:var(--badge-pend-text);font-family:monospace;font-size:11px">${fmtDate(match.validade)}</span>`;
+      bData =`<span style="color:var(--text2);font-family:monospace;font-size:11px">${fmtDate(match.dataFeita)}</span>`;
+      rowCls='base-found';
+    } else if(baseData.length>0){
+      rowCls='base-notfound';
+    }
+
+    // status badge
+    let statusBadge;
+    if(p._rebaixa)       statusBadge='<span class="badge badge-ok">✓ FEITA</span>';
+    else if(match)        statusBadge='<span class="badge badge-match">📋 NA BASE</span>';
+    else                  statusBadge='<span class="badge badge-pend">PENDENTE</span>';
+
+    return `<div class="tr-f ${rowCls}">
+      <span style="text-align:center">
+        ${!p._rebaixa
+          ?`<input type="checkbox" ${selection[p._id]?'checked':''} onchange="toggleSel(${p._id})" style="width:15px;height:15px;accent-color:#f97316;cursor:pointer">`
+          :`<span style="color:var(--badge-ok-text)">✓</span>`}
+      </span>
+      <span class="mono">${esc(p._loja)||'—'}</span>
+      <span style="font-family:monospace;font-size:11px;color:#f97316">${esc(p._plu)||'—'}</span>
+      <span class="cell-desc" title="${esc(p._desc)}" style="color:${(Number(p._qtd)>60||String(p._desc).toUpperCase().includes(' KG'))?'#f59e0b':'var(--text)'};font-weight:${(Number(p._qtd)>60||String(p._desc).toUpperCase().includes(' KG'))?'700':'500'}">${esc(p._desc)}</span>
+      <span class="mono">${fmtDate(p._venc)}</span>
+      <span style="color:${dColor};font-weight:700;font-family:monospace">${p._dias!==''?p._dias:'—'}</span>
+      <span style="color:${(()=>{const q=Number(p._qtd);return!isNaN(q)?(q>60?'var(--badge-quebra-text)':q>30?'var(--badge-pend-text)':'var(--text)'):'var(--text)'})()};font-weight:700;font-family:monospace;font-size:12px">${p._qtd!==''?esc(p._qtd):'—'}</span>
+      <span>${avBadge}</span>
+      <span class="sep-col">${bPreco}</span>
+      <span>${bVal}</span>
+      <span>${bData}</span>
+      ${!p._rebaixa
+        ?`<input class="inp ${pv?'filled':''}" type="number" step="0.01" min="0"
+            value="${esc(pv)}" placeholder="0,00"
+            oninput="prices[${p._id}]=this.value;this.classList.toggle('filled',!!this.value)">`
+        :`<span class="mono">${p._preco&&p._preco!==0?'R$'+p._preco:'—'}</span>`}
+      ${!p._rebaixa
+        ?`<input class="inp ${mg?'filled':''}" type="number" step="0.1"
+            value="${esc(mg)}" placeholder="0"
+            oninput="margins[${p._id}]=this.value;this.classList.toggle('filled',!!this.value)">`
+        :`<span class="mono">${p._margem&&p._margem!==0?p._margem+'%':'—'}</span>`}
+      <span>${statusBadge}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── controles ──
+function toggleSel(id){selection[id]=!selection[id];renderFifo();}
+function setFifoFilter(f,btn){
+  fifoFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderFifo();
+}
+function toggleAll(checked){getVisible().filter(p=>!p._rebaixa).forEach(p=>{selection[p._id]=checked;});renderFifo();}
+function selAllPend(){getVisible().filter(p=>!p._rebaixa).forEach(p=>{selection[p._id]=true;});renderFifo();}
+function clearSel(){getVisible().forEach(p=>{selection[p._id]=false;});renderFifo();}
+function resetFifo(){
+  fifoData=[];fifoHeaders=[];selection={};prices={};margins={};fifoFilter='todos';fifoSearch='';sortKey='';sortDir=1;colFilters={};
+  document.getElementById('fi-fifo').value='';
+  document.getElementById('fifo-review').style.display='none';
+  document.getElementById('fifo-upload').style.display='block';
+  setErr('fifo','');
+}
+
+// ── exportar ──
+function exportarFifo(){
+  const chosen=fifoData.filter(p=>selection[p._id]);
+  if(!chosen.length){document.getElementById('fifo-rev-err').textContent='Selecione ao menos um produto.';return;}
+  document.getElementById('fifo-rev-err').textContent='';
+
+  const today=new Date();
+  const todayStr=`${p2(today.getDate())}/${p2(today.getMonth()+1)}/${today.getFullYear()}`;
+  const monthNames=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+  const titleStr=`PLANILHA FIFO ${monthNames[today.getMonth()]}  -  ${today.getFullYear()}`;
+
+  const wb = XLSX.utils.book_new();
+  const aoa = [];
+
+  // Row 1: title (merged A1:L2 via !merges)
+  aoa.push([titleStr,'','','','','','','','','','','']);
+  // Row 2: merged continuation
+  aoa.push(['','','','','','','','','','','','']);
+  // Row 3: spacer
+  aoa.push(['','','','','','','','','','','','']);
+  // Row 4: header
+  aoa.push(['Nº','LOJA','PLU','DESCRIÇÃO','DIA PASSADO','AVARIA','DIA FEITO','VENCIMENTO','DIAS VENC.','QUANT. VENC','PREÇO VENDA','MARGEM (%)']);
+  // Data rows
+  chosen.forEach((p,i)=>{
+    const pv = prices[p._id]  ? parseFloat(prices[p._id])  : (p._preco  && p._preco !==0 ? p._preco  : '');
+    const mg = margins[p._id] ? parseFloat(margins[p._id]) : (p._margem && p._margem!==0 ? p._margem : '');
+    aoa.push([
+      i+1,
+      p._loja!==''  ? Number(p._loja) : '',
+      p._plu!==''   ? Number(p._plu)  : '',
+      p._desc || '',
+      todayStr,
+      p._avaria || '',
+      (()=>{
+        const m=getVerifMatch(p._plu);
+        if(m && m.dataFeita) return fmtDate(m.dataFeita);
+        return '';
+      })(),
+      fmtDate(p._venc),
+      p._dias!=='' ? Number(p._dias) : '',
+      p._qtd !=='' ? Number(p._qtd)  : '',
+      pv !== '' ? pv : '',
+      mg !== '' ? mg : '',
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // Merges: A1:L2
+  ws['!merges'] = [{s:{r:0,c:0}, e:{r:1,c:11}}];
+
+  // Column widths (exact match original)
+  ws['!cols'] = [
+    {wch:5.3},{wch:7.4},{wch:8.1},{wch:51.9},
+    {wch:13.3},{wch:13.3},{wch:13.0},{wch:13.9},
+    {wch:11.0},{wch:13.0},{wch:13.3},{wch:12.9}
+  ];
+
+  // Row heights: row3=6pt spacer
+  ws['!rows'] = [
+    {},{},{hpt:6},{hpt:20},
+    ...chosen.map(()=>({hpt:15}))
+  ];
+
+  // ── Styles ──
+  const hair = {style:'hair',color:{rgb:'000000'}};
+  const hairBorder = {top:hair,bottom:hair,left:hair,right:hair};
+
+  const thin  = {style:'thin', color:{rgb:'000000'}};
+  const thinBorder = {top:thin,bottom:thin,left:thin,right:thin};
+
+  const titleStyle = {
+    font:{name:'Calibri',bold:true,sz:22},
+    alignment:{horizontal:'center',vertical:'center'}
+  };
+  const hdrStyle = {
+    font:{name:'Calibri',bold:true,sz:11},
+    alignment:{horizontal:'center',vertical:'center'},
+    border:thinBorder
+  };
+  const dataStyleC = {
+    font:{name:'Calibri',sz:11},
+    alignment:{horizontal:'center',vertical:'center'},
+    border:thinBorder
+  };
+  const dataStyleL = {
+    font:{name:'Calibri',sz:11},
+    alignment:{horizontal:'left',vertical:'center'},
+    border:thinBorder
+  };
+  const dataStyleR = {
+    font:{name:'Calibri',sz:11},
+    alignment:{horizontal:'right',vertical:'center'},
+    border:thinBorder,
+    numFmt:'"R$" #,##0.00'
+  };
+  const dataStylePct = {
+    font:{name:'Calibri',sz:11},
+    alignment:{horizontal:'right',vertical:'center'},
+    border:thinBorder,
+    numFmt:'0.00%'
+  };
+  const diasRedStyle = {
+    font:{name:'Calibri',sz:11,bold:true,color:{rgb:'CC0000'}},
+    alignment:{horizontal:'center',vertical:'center'},
+    border:thinBorder,
+    fill:{patternType:'solid',fgColor:{rgb:'FFCCCC'}}
+  };
+  const diasOrgStyle = {
+    font:{name:'Calibri',sz:11,bold:true,color:{rgb:'7C3800'}},
+    alignment:{horizontal:'center',vertical:'center'},
+    border:thinBorder,
+    fill:{patternType:'solid',fgColor:{rgb:'FFE5B4'}}
+  };
+
+  const cols = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+
+  // Title
+  if(ws['A1']) ws['A1'].s = titleStyle;
+
+  // Header row 4 — centered, bold, thin border
+  cols.forEach(c=>{ const ref=c+'4'; if(ws[ref]) ws[ref].s=hdrStyle; });
+
+  // Data rows start at row 5
+  chosen.forEach((_,i)=>{
+    const r = i+5;
+    cols.forEach((c,ci)=>{
+      const ref=c+r;
+      if(!ws[ref]) return;
+      if(ci===3)       ws[ref].s = dataStyleL;   // D: DESCRIÇÃO left
+      else if(ci===10) ws[ref].s = dataStyleR;   // K: PREÇO VENDA currency
+      else if(ci===11) ws[ref].s = dataStylePct; // L: MARGEM %
+      else             ws[ref].s = dataStyleC;
+    });
+    // DIAS VENC highlight
+    const diasVal = Number(aoa[i+4][8]);
+    const diasRef = 'I'+r;
+    if(ws[diasRef] && !isNaN(diasVal)){
+      if(diasVal<=3)      ws[diasRef].s = diasRedStyle;
+      else if(diasVal<=7) ws[diasRef].s = diasOrgStyle;
+    }
+  });
+
+  XLSX.utils.book_append_sheet(wb, ws, 'BASE FIFO');
+
+  const lojaNum = fifoData.length ? String(fifoData[0]._loja||'').trim() : '';
+  const exportName = lojaNum ? `PLANILHA FIFO ${lojaNum}.xlsx` : `PLANILHA FIFO ${today.getFullYear()}${p2(today.getMonth()+1)}${p2(today.getDate())}.xlsx`;
+  XLSX.writeFile(wb, exportName, {cellStyles:true});
+}
+
+// ══════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════
+function normPlu(s){const v=String(s??"").trim();return v.includes(".")?String(parseInt(v,10)):v;}
+function norm(s){return String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'').replace(/[^a-z0-9]/g,'');}
+function get(row,idx){return(idx>=0&&idx<row.length)?row[idx]:'';}
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function p2(n){return String(n).padStart(2,'0');}
+function fmtDate(v){
+  if(!v&&v!==0) return '—';
+  if(v instanceof Date) return `${p2(v.getDate())}/${p2(v.getMonth()+1)}/${v.getFullYear()}`;
+  const s=String(v);
+  if(/\d{2}\/\d{2}\/\d{4}/.test(s)) return s;
+  if(/\d{4}-\d{2}-\d{2}/.test(s)){const[y,m,d]=s.split('T')[0].split('-');return`${d}/${m}/${y}`;}
+  if(!isNaN(s)&&s!==''){try{const d=XLSX.SSF.parse_date_code(Number(s));if(d)return`${p2(d.d)}/${p2(d.m)}/${d.y}`;}catch(e){}}
+  return s;
+}
+function fmtPreco(v){
+  if(v===''||v==null) return '—';
+  const n=parseFloat(v);
+  return isNaN(n)?String(v):n.toFixed(2).replace('.',',');
+}
+function setErr(target,msg){
+  document.getElementById(target+'-err').innerHTML=msg?`<div class="err-box">⚠ ${msg}</div>`:'';
+}
+
+function toggleTheme(){
+  const isLight=document.body.classList.toggle('light');
+  document.getElementById('theme-icon').textContent=isLight?'●':'☀';
+  document.getElementById('theme-label').textContent=isLight?'Tema Escuro':'Tema Claro';
+  try{localStorage.setItem('fifo-theme',isLight?'light':'dark');}catch(e){}
+}
+(function(){
+  try{
+    if(localStorage.getItem('fifo-theme')==='light'){
+      document.body.classList.add('light');
+      window.addEventListener('DOMContentLoaded',function(){
+        var ti=document.getElementById('theme-icon');
+        var tl=document.getElementById('theme-label');
+        if(ti)ti.textContent='●';
+        if(tl)tl.textContent='Tema Escuro';
+      });
+    }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

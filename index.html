@@ -4,8 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestor FIFO – Rebaixa</title>
+<!-- ExcelJS: full styling support (free) -->
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<!-- FileSaver: download trigger -->
+<script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+<!-- SheetJS: only for IMPORT (reading xlsx) -->
 <script>
-// SheetJS loader with fallback CDNs
 (function(){
   var urls = [
     'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
@@ -25,7 +29,7 @@
 })();
 </script>
 <div id="xlsx-err" style="display:none;position:fixed;top:0;left:0;right:0;background:#b91c1c;color:#fff;text-align:center;padding:10px;font-size:13px;font-weight:600;z-index:9999">
-  ⚠ Biblioteca de exportação não carregou. Verifique sua conexão com a internet e recarregue a página.
+  ⚠ Biblioteca de importação não carregou. Verifique sua conexão e recarregue a página.
 </div>
 <style>
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
@@ -210,7 +214,7 @@ select.filter-mini { cursor:pointer; }
   <div class="logo">⏱</div>
   <div>
     <div class="app-title">GESTOR FIFO – REBAIXA</div>
-    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.2</span></div>
+    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.7</span></div>
   </div>
   <button id="theme-toggle" onclick="toggleTheme()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><span id="theme-icon">☀</span> <span id="theme-label">Tema Claro</span></button>
 </header>
@@ -325,7 +329,7 @@ select.filter-mini { cursor:pointer; }
       <button class="btn-back" onclick="resetFifo()">← Nova Planilha</button>
       <div class="fname" id="fifo-fname"></div>
       <div class="rev-err" id="fifo-rev-err"></div>
-      <button class="btn-export" id="btn-exp" onclick="exportarFifo()" disabled>⬇ EXPORTAR SELECIONADOS (.xlsx)</button>
+      <button class="btn-export" id="btn-exp" onclick="exportarFifo().catch(e=>alert('Erro: '+e.message))" disabled>⬇ EXPORTAR SELECIONADOS (.xlsx)</button>
     </div>
   </div>
 </div>
@@ -333,6 +337,7 @@ select.filter-mini { cursor:pointer; }
 <!-- ══════════════ ABA BASE PRINCIPAL ══════════════ -->
 <div class="page" id="page-principal">
   <div style="max-width:660px;margin:0 auto">
+    <div id="principal-saved-banner" style="display:none" class="saved-banner">✅ <span id="principal-saved-info"></span><button onclick="clearSavedBase('principal')">✕ Limpar</button></div>
     <div class="dropzone" id="dz-principal" onclick="document.getElementById('fi-principal').click()"
       ondragover="dzOver(event,'dz-principal')" ondragleave="dzOut('dz-principal')" ondrop="dzDrop(event,'principal')">
       <div class="dz-icon">📦</div>
@@ -373,6 +378,7 @@ select.filter-mini { cursor:pointer; }
 <!-- ══════════════ ABA BASE VERIFICAÇÃO ══════════════ -->
 <div class="page" id="page-base">
   <div style="max-width:660px;margin:0 auto">
+    <div id="base-saved-banner" style="display:none" class="saved-banner">✅ <span id="base-saved-info"></span><button onclick="clearSavedBase('base')">✕ Limpar</button></div>
     <div class="dropzone" id="dz-base" onclick="document.getElementById('fi-base').click()"
       ondragover="dzOver(event,'dz-base')" ondragleave="dzOut('dz-base')" ondrop="dzDrop(event,'base')">
       <div class="dz-icon">🗄️</div>
@@ -506,7 +512,11 @@ function loadPrincipal(file) {
       const banner = document.getElementById('banner-principal');
       if(banner) banner.style.display='none';
 
-      renderPrincipalTable(Object.entries(principalMap).map(([plu,v])=>({plu,...v})));
+      // Save to localStorage
+      const principalRows = Object.entries(principalMap).map(([plu,v])=>({plu,...v}));
+      const saved = saveBaseToStorage('principal', principalRows, file.name);
+      if(saved) showSavedBanner('principal', file.name, new Date().toISOString(), principalRows.length);
+      renderPrincipalTable(principalRows);
       if(fifoData.length){
         fifoData.forEach(p=>{
           // PROCV direto: PLU ja esta normalizado em p._plu
@@ -588,6 +598,9 @@ function loadBase(file) {
       document.getElementById('base-badge').style.display='inline';
       document.getElementById('base-badge').textContent=baseData.length;
       renderBaseTable(baseData);
+      // Save to localStorage
+      const bSaved = saveBaseToStorage('base', baseData, file.name);
+      if(bSaved) showSavedBanner('base', file.name, new Date().toISOString(), baseData.length);
       if(fifoData.length) renderFifo();
     }catch(err){setErr('base','Erro: '+err.message);}
   };
@@ -889,74 +902,175 @@ function resetFifo(){
 }
 
 // ── exportar ──
-function exportarFifo(){
-  if(typeof XLSX === 'undefined'){
-    alert('Biblioteca de exportação ainda não carregou. Aguarde alguns segundos e tente novamente.');
+async function exportarFifo(){
+  if(typeof ExcelJS === 'undefined'){
+    alert('Biblioteca ExcelJS não carregou. Verifique sua conexão e recarregue a página.');
     return;
   }
-  const chosen=fifoData.filter(p=>selection[p._id]);
-  if(!chosen.length){document.getElementById('fifo-rev-err').textContent='Selecione ao menos um produto.';return;}
-  document.getElementById('fifo-rev-err').textContent='';
+  const chosen = fifoData.filter(p => selection[p._id]);
+  if(!chosen.length){ document.getElementById('fifo-rev-err').textContent='Selecione ao menos um produto.'; return; }
+  document.getElementById('fifo-rev-err').textContent = '';
 
-  const today=new Date();
-  const todayStr=`${p2(today.getDate())}/${p2(today.getMonth()+1)}/${today.getFullYear()}`;
-  const monthNames=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
-  const titleStr=`PLANILHA FIFO ${monthNames[today.getMonth()]}  -  ${today.getFullYear()}`;
+  const today = new Date();
+  const todayStr = `${p2(today.getDate())}/${p2(today.getMonth()+1)}/${today.getFullYear()}`;
+  const monthNames = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+  const titleStr = `PLANILHA FIFO ${monthNames[today.getMonth()]}  -  ${today.getFullYear()}`;
 
-  // Build AOA
-  const aoa = [];
-  aoa.push([titleStr,'','','','','','','','','','','']); // row 1 title
-  aoa.push(['','','','','','','','','','','','']);         // row 2 merged
-  aoa.push(['','','','','','','','','','','','']);         // row 3 spacer
-  aoa.push(['Nº','LOJA','PLU','DESCRIÇÃO','DIA PASSADO','AVARIA','DIA FEITO','VENCIMENTO','DIAS VENC.','QUANT. VENC','PREÇO VENDA','MARGEM (%)']);
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Gestor FIFO';
+  wb.created = today;
+  const ws = wb.addWorksheet('BASE FIFO');
 
-  chosen.forEach((p,i)=>{
-    const pv = prices[p._id]  ? parseFloat(prices[p._id])  : (p._preco  && p._preco !==0 ? p._preco  : '');
-    const mg = margins[p._id] ? parseFloat(margins[p._id]) : (p._margem && p._margem!==0 ? p._margem : '');
-    const m  = getVerifMatch(p._plu);
+  // ── column widths ──────────────────────────────
+  ws.columns = [
+    {key:'nr',   width:5.3},
+    {key:'loja', width:7.4},
+    {key:'plu',  width:8.1},
+    {key:'desc', width:52},
+    {key:'diap', width:13.3},
+    {key:'av',   width:13.3},
+    {key:'diaf', width:13.3},
+    {key:'venc', width:13.9},
+    {key:'dias', width:11},
+    {key:'qtd',  width:13},
+    {key:'preco',width:13.3},
+    {key:'mg',   width:12.9},
+  ];
+
+  // ── helpers ────────────────────────────────────
+  const thin  = { style:'thin',  color:{argb:'FF000000'} };
+  const thinB = { top:thin, bottom:thin, left:thin, right:thin };
+
+  function setHdr(cell, value){
+    cell.value = value;
+    cell.font      = { name:'Calibri', bold:true, size:11 };
+    cell.alignment = { horizontal:'center', vertical:'middle' };
+    cell.border    = thinB;
+  }
+
+  function setData(cell, value, align='center', numFmt=null){
+    cell.value     = value;
+    cell.font      = { name:'Calibri', size:11 };
+    cell.alignment = { horizontal:align, vertical:'middle' };
+    cell.border    = thinB;
+    if(numFmt) cell.numFmt = numFmt;
+  }
+
+  // ── ROW 1-2: title merged ──────────────────────
+  ws.mergeCells('A1:L2');
+  const titleCell = ws.getCell('A1');
+  titleCell.value     = titleStr;
+  titleCell.font      = { name:'Calibri', bold:true, size:22, color:{argb:'FFFFFFFF'} };
+  titleCell.alignment = { horizontal:'center', vertical:'middle' };
+  titleCell.fill      = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1F4E79'} };
+  ws.getRow(1).height = 26;
+  ws.getRow(2).height = 26;
+
+  // ── ROW 3: spacer ──────────────────────────────
+  ws.getRow(3).height = 6;
+
+  // ── ROW 4: header ──────────────────────────────
+  const hdrRow = ws.getRow(4);
+  hdrRow.height = 22;
+  const hdrCols = ['Nº','LOJA','PLU','DESCRIÇÃO','DIA PASSADO','AVARIA','DIA FEITO','VENCIMENTO','DIAS VENC.','QUANT. VENC','PREÇO VENDA','MARGEM (%)'];
+  hdrCols.forEach((h,i) => setHdr(hdrRow.getCell(i+1), h));
+
+  // ── DATA ROWS ──────────────────────────────────
+  chosen.forEach((p, i) => {
+    const rowNum  = i + 5;
+    const row     = ws.getRow(rowNum);
+    row.height    = 16;
+
+    const pv      = prices[p._id]  ? parseFloat(prices[p._id])  : (p._preco  && p._preco !==0 ? p._preco  : null);
+    const mg      = margins[p._id] ? parseFloat(margins[p._id]) : (p._margem && p._margem!==0 ? p._margem : null);
+    const m       = getVerifMatch(p._plu);
     const diaFeito = (m && m.dataFeita) ? fmtDate(m.dataFeita) : '';
-    aoa.push([
+    const diasNum  = Number(p._dias);
+    const qtdNum   = Number(p._qtd);
+    const isHighlight = qtdNum > 60 || String(p._desc).toUpperCase().includes(' KG');
+
+    const values = [
       i+1,
       p._loja!=='' ? Number(p._loja)||p._loja : '',
       p._plu !=='' ? Number(p._plu) ||p._plu  : '',
-      p._desc||'',
+      p._desc || '',
       todayStr,
-      p._avaria||'',
+      p._avaria || '',
       diaFeito,
       fmtDate(p._venc),
-      p._dias!=='' ? Number(p._dias)||'' : '',
-      p._qtd !=='' ? Number(p._qtd) ||'' : '',
-      pv!=='' ? pv : '',
-      mg!=='' ? mg : '',
-    ]);
+      p._dias!=='' ? diasNum : '',
+      p._qtd !=='' ? qtdNum  : '',
+      pv  !== null ? pv  : '',
+      mg  !== null ? mg  : '',
+    ];
+
+    values.forEach((val, ci) => {
+      const cell  = row.getCell(ci+1);
+      const align = ci===3 ? 'left' : ci>=10 ? 'right' : 'center';
+      const fmt   = ci===10 ? '"R$" #,##0.00' : ci===11 ? '0.00%' : null;
+      setData(cell, val, align, fmt);
+
+      // DESCRIÇÃO highlight (yellow bg + dark text, like spreadsheet example)
+      if(ci===3 && isHighlight){
+        cell.font = { name:'Calibri', size:11, bold:true, color:{argb:'FF1A1A00'} };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'} };
+      }
+
+      // DIAS VENC color — matches image 1: red text on light pink bg
+      if(ci===8 && !isNaN(diasNum)){
+        if(diasNum<=3){
+          cell.font = { name:'Calibri', size:11, bold:true, color:{argb:'FFCC0000'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFC7CE'} };
+        } else if(diasNum<=7){
+          cell.font = { name:'Calibri', size:11, bold:true, color:{argb:'FF9C0006'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFC7CE'} };
+        } else if(diasNum<=15){
+          cell.font = { name:'Calibri', size:11, bold:false, color:{argb:'FF9C6500'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFEB9C'} };
+        }
+      }
+      // QTD — same scale
+      if(ci===9 && !isNaN(qtdNum)){
+        if(qtdNum>60){
+          cell.font = { name:'Calibri', size:11, bold:true, color:{argb:'FFCC0000'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFC7CE'} };
+        } else if(qtdNum>30){
+          cell.font = { name:'Calibri', size:11, bold:false, color:{argb:'FF9C6500'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFEB9C'} };
+        }
+      }
+
+
+
+      // AVARIA color
+      if(ci===5){
+        const av = String(val).toUpperCase();
+        if(av==='QUEBRA'){
+          cell.font = { name:'Calibri', size:11, bold:true, color:{argb:'FFCC0000'} };
+          cell.fill = { type:'pattern', pattern:'none' };
+        } else if(av==='TROCA'){
+          cell.font = { name:'Calibri', size:11, bold:false, color:{argb:'FF1F4E79'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF9DC3E6'} };
+        }
+      }
+    });
   });
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  // ── freeze row 4 ──────────────────────────────
+  ws.views = [{ state:'frozen', xSplit:0, ySplit:4, activeCell:'A5' }];
 
-  // Merges
-  ws['!merges'] = [{s:{r:0,c:0}, e:{r:1,c:11}}];
-
-  // Column widths
-  ws['!cols'] = [
-    {wch:5},{wch:7},{wch:8},{wch:50},
-    {wch:13},{wch:12},{wch:13},{wch:13},
-    {wch:10},{wch:12},{wch:13},{wch:12}
-  ];
-
-  // Row heights
-  ws['!rows'] = [{hpt:22},{hpt:22},{hpt:6},{hpt:20},...chosen.map(()=>({hpt:15}))];
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'BASE FIFO');
-
-  const lojaNum = fifoData.length ? String(fifoData[0]._loja||'').trim() : '';
-  const fname = lojaNum
-    ? `PLANILHA FIFO ${lojaNum}.xlsx`
-    : `PLANILHA FIFO ${today.getFullYear()}${p2(today.getMonth()+1)}${p2(today.getDate())}.xlsx`;
+  // ── generate & download ───────────────────────
+  const lojaNum  = fifoData.length ? String(fifoData[0]._loja||'').trim() : '';
+  const dateStr2 = `${p2(today.getDate())}-${p2(today.getMonth()+1)}-${today.getFullYear()}`;
+  const fname    = lojaNum
+    ? `PLANILHA FIFO ${lojaNum} ${dateStr2}.xlsx`
+    : `PLANILHA FIFO ${dateStr2}.xlsx`;
 
   try {
-    XLSX.writeFile(wb, fname);
-  } catch(e) {
+    const buf  = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, fname);
+  } catch(e){
     console.error('Export error:', e);
     alert('Erro ao exportar: ' + e.message);
   }
@@ -988,12 +1102,135 @@ function setErr(target,msg){
   document.getElementById(target+'-err').innerHTML=msg?`<div class="err-box">⚠ ${msg}</div>`:'';
 }
 
+// ══════════════════════════════════════════
+//  MEMÓRIA DAS BASES (localStorage)
+// ══════════════════════════════════════════
+
+function saveBaseToStorage(key, data, filename){
+  try {
+    const payload = JSON.stringify({data, filename, savedAt: new Date().toISOString()});
+    // check size — localStorage limit is ~5MB
+    if(payload.length > 4.5*1024*1024){
+      console.warn('Base muito grande para salvar localmente:', key);
+      return false;
+    }
+    localStorage.setItem('fifo-'+key, payload);
+    return true;
+  } catch(e) {
+    console.warn('Erro ao salvar base:', e);
+    return false;
+  }
+}
+
+function loadBaseFromStorage(key){
+  try {
+    const raw = localStorage.getItem('fifo-'+key);
+    if(!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function clearSavedBase(key){
+  try { localStorage.removeItem('fifo-'+key); } catch(e){}
+  if(key==='principal'){
+    principalMap = {}; principalLoaded = false;
+    document.getElementById('principal-saved-banner').style.display='none';
+    document.getElementById('principal-loaded').style.display='none';
+    document.getElementById('principal-preview').style.display='none';
+    document.getElementById('principal-badge').style.display='none';
+    if(fifoData.length) renderFifo();
+  } else {
+    baseData = []; baseMap = {};
+    document.getElementById('base-saved-banner').style.display='none';
+    document.getElementById('base-loaded').style.display='none';
+    document.getElementById('base-preview').style.display='none';
+    document.getElementById('base-badge').style.display='none';
+    if(fifoData.length) renderFifo();
+  }
+}
+
+function showSavedBanner(key, filename, savedAt, count){
+  const d = new Date(savedAt);
+  const dateStr = `${p2(d.getDate())}/${p2(d.getMonth()+1)}/${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  const banner = document.getElementById(key+'-saved-banner');
+  const info   = document.getElementById(key+'-saved-info');
+  if(banner && info){
+    info.textContent = `${filename} · ${count} registros · salvo em ${dateStr}`;
+    banner.style.display = 'flex';
+  }
+}
+
+function restoreSavedBases(){
+  // Restore Base Principal
+  const pData = loadBaseFromStorage('principal');
+  if(pData && pData.data){
+    try {
+      principalMap = {};
+      let quebra=0,troca=0,naoTrata=0;
+      pData.data.forEach(row => {
+        const entry = {desc:row.desc, comprador:row.comprador, statusVenda:row.statusVenda, avaria:row.avaria};
+        principalMap[row.plu]          = entry;
+        principalMap[normPlu(row.plu)] = entry;
+        const av = String(row.avaria||'').toUpperCase();
+        if(av==='QUEBRA') quebra++; else if(av==='TROCA') troca++; else naoTrata++;
+      });
+      principalLoaded = true;
+      const total = Object.keys(principalMap).length;
+      document.getElementById('p-total').textContent    = pData.data.length;
+      document.getElementById('p-quebra').textContent   = quebra;
+      document.getElementById('p-troca').textContent    = troca;
+      document.getElementById('p-naotrata').textContent = naoTrata;
+      document.getElementById('principal-fname2').textContent = pData.filename;
+      document.getElementById('principal-loaded').style.display = 'block';
+      document.getElementById('principal-preview').style.display = 'block';
+      document.getElementById('principal-badge').style.display = 'inline';
+      document.getElementById('principal-badge').textContent = total;
+      renderPrincipalTable(pData.data);
+      showSavedBanner('principal', pData.filename, pData.savedAt, pData.data.length);
+      console.log('Base Principal restaurada:', total, 'produtos');
+    } catch(e){ console.warn('Erro ao restaurar Base Principal:', e); }
+  }
+
+  // Restore Base de Verificação
+  const bData = loadBaseFromStorage('base');
+  if(bData && bData.data){
+    try {
+      baseData = []; baseMap = {};
+      bData.data.forEach(rec => {
+        baseData.push(rec);
+        const k = normPlu(rec.plu);
+        if(!baseMap[k]) baseMap[k]=[];
+        baseMap[k].push(rec);
+      });
+      const uniquePLUs = Object.keys(baseMap).length;
+      const dates = baseData.map(r=>r.dataFeita).map(d=>new Date(d)).filter(d=>!isNaN(d));
+      const lastDate = dates.length ? new Date(Math.max(...dates)) : null;
+      document.getElementById('b-total').textContent = baseData.length;
+      document.getElementById('b-plus').textContent  = uniquePLUs;
+      document.getElementById('b-last').textContent  = lastDate ? fmtDate(lastDate) : '—';
+      document.getElementById('base-fname2').textContent = bData.filename;
+      document.getElementById('base-loaded').style.display  = 'block';
+      document.getElementById('base-preview').style.display = 'block';
+      document.getElementById('base-badge').style.display   = 'inline';
+      document.getElementById('base-badge').textContent     = baseData.length;
+      renderBaseTable(baseData);
+      showSavedBanner('base', bData.filename, bData.savedAt, baseData.length);
+      console.log('Base Verificação restaurada:', baseData.length, 'registros');
+    } catch(e){ console.warn('Erro ao restaurar Base Verificação:', e); }
+  }
+}
+
 function toggleTheme(){
   const isLight=document.body.classList.toggle('light');
   document.getElementById('theme-icon').textContent=isLight?'●':'☀';
   document.getElementById('theme-label').textContent=isLight?'Tema Escuro':'Tema Claro';
   try{localStorage.setItem('fifo-theme',isLight?'light':'dark');}catch(e){}
 }
+// Restore bases on load
+window.addEventListener('DOMContentLoaded', function(){
+  restoreSavedBases();
+});
+
 (function(){
   try{
     if(localStorage.getItem('fifo-theme')==='light'){

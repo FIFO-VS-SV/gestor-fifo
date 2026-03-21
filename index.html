@@ -9,6 +9,29 @@
 <!-- FileSaver: download trigger -->
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <!-- SheetJS: only for IMPORT (reading xlsx) -->
+<!-- Modal Relatório -->
+<div id="modal-relatorio" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center" onclick="if(event.target===this)fecharModal()">
+  <div id="modal-box" style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:620px;width:90%;max-height:85vh;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:15px;font-weight:700;color:var(--text)">📋 Relatório para WhatsApp</span>
+      <button onclick="fecharModal()" style="background:none;border:none;color:var(--text2);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <!-- filter tabs -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="rtab-todos"   onclick="setRelatorioFiltro('todos')"  style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,#f97316,#b91c1c);color:#fff">Todos</button>
+      <button id="rtab-quebra"  onclick="setRelatorioFiltro('quebra')" style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #7f1d1d;background:var(--badge-quebra-bg);color:var(--badge-quebra-text)">🔴 Quebra</button>
+      <button id="rtab-troca"   onclick="setRelatorioFiltro('troca')"  style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--badge-match-border);background:var(--badge-match-bg);color:var(--badge-match-text)">🔵 Troca</button>
+      <button id="rtab-urgente" onclick="setRelatorioFiltro('urgente')" style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid #7f1d1d;background:var(--badge-quebra-bg);color:var(--badge-quebra-text)">🚨 Urgentes (≤3d)</button>
+    </div>
+    <textarea id="relatorio-texto" style="flex:1;min-height:300px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:monospace;font-size:12px;padding:12px;resize:none;line-height:1.6" readonly></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">
+      <div id="copiado-msg" style="display:none;font-size:12px;color:#25d366;font-weight:600;margin-right:auto">✅ Copiado!</div>
+      <button onclick="copiarRelatorio()" style="padding:9px 20px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">📋 Copiar</button>
+      <button onclick="fecharModal()" style="padding:9px 16px;background:var(--bg);border:1px solid var(--border2);color:var(--text2);border-radius:8px;font-size:13px;cursor:pointer">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   var urls = [
@@ -214,7 +237,7 @@ select.filter-mini { cursor:pointer; }
   <div class="logo">⏱</div>
   <div>
     <div class="app-title">GESTOR FIFO – REBAIXA</div>
-    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v1.7</span></div>
+    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v2.0</span></div>
   </div>
   <button id="theme-toggle" onclick="toggleTheme()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><span id="theme-icon">☀</span> <span id="theme-label">Tema Claro</span></button>
 </header>
@@ -330,6 +353,7 @@ select.filter-mini { cursor:pointer; }
       <div class="fname" id="fifo-fname"></div>
       <div class="rev-err" id="fifo-rev-err"></div>
       <button class="btn-export" id="btn-exp" onclick="exportarFifo().catch(e=>alert('Erro: '+e.message))" disabled>⬇ EXPORTAR SELECIONADOS (.xlsx)</button>
+      <button class="btn-export" id="btn-wpp" onclick="gerarRelatorio()" disabled style="background:linear-gradient(135deg,#25d366,#128c7e);margin-left:4px">📋 RELATÓRIO</button>
     </div>
   </div>
 </div>
@@ -579,9 +603,12 @@ function loadBase(file) {
         const r=rows[i];
         const plu=String(r[0]??'').trim();
         if(!plu||plu==='') continue;
+        const lojaRaw = String(r[8]??'').trim();
+        const lojaMatch = lojaRaw.match(/^0*(\d+)/);
+        const lojaNum = lojaMatch ? String(parseInt(lojaMatch[1],10)) : lojaRaw;
         const rec={plu,desc:String(r[1]??'').trim(),unid:String(r[2]??'').trim(),
           preco:r[3]??'',validade:r[4]??'',qtd:r[5]??'',
-          usuario:String(r[6]??'').trim(),dataFeita:r[7]??'',loja:String(r[8]??'').trim()};
+          usuario:String(r[6]??'').trim(),dataFeita:r[7]??'',loja:lojaRaw,lojaNum};
         baseData.push(rec);
         if(!baseMap[normPlu(plu)]) baseMap[normPlu(plu)]=[];
         baseMap[normPlu(plu)].push(rec);
@@ -725,10 +752,21 @@ function loadFifo(file){
   reader.readAsArrayBuffer(file);
 }
 
-function getVerifMatch(plu){
+function getVerifMatch(plu, lojaFilter){
   const recs=baseMap[normPlu(plu)];
   if(!recs||!recs.length) return null;
-  return recs.slice().sort((a,b)=>{
+
+  // Try to match by loja first
+  let filtered = recs;
+  if(lojaFilter){
+    const lf = String(parseInt(lojaFilter,10)||lojaFilter);
+    const byLoja = recs.filter(r => r.lojaNum === lf || String(r.lojaNum) === lf);
+    if(byLoja.length) filtered = byLoja;
+    // if no match for this loja, return null — product not rebaixado in this store
+    else return null;
+  }
+
+  return filtered.slice().sort((a,b)=>{
     const da=a.dataFeita instanceof Date?a.dataFeita:new Date(a.dataFeita||0);
     const db=b.dataFeita instanceof Date?b.dataFeita:new Date(b.dataFeita||0);
     return db-da;
@@ -753,8 +791,8 @@ function getVisible(){
   let arr=fifoData;
   if(fifoFilter==='rebaixa')  arr=arr.filter(p=>p._rebaixa);
   if(fifoFilter==='pendente') arr=arr.filter(p=>!p._rebaixa);
-  if(fifoFilter==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu));
-  if(fifoFilter==='sembase')  arr=arr.filter(p=>!getVerifMatch(p._plu));
+  if(fifoFilter==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu, p._loja));
+  if(fifoFilter==='sembase')  arr=arr.filter(p=>!getVerifMatch(p._plu, p._loja));
   if(fifoFilter==='quebra')   arr=arr.filter(p=>String(p._avaria).toUpperCase()==='QUEBRA');
   if(fifoFilter==='troca')    arr=arr.filter(p=>String(p._avaria).toUpperCase()==='TROCA');
   if(fifoSearch){
@@ -767,7 +805,7 @@ function getVisible(){
   if(colFilters.status){
     if(colFilters.status==='pendente') arr=arr.filter(p=>!p._rebaixa);
     if(colFilters.status==='rebaixa')  arr=arr.filter(p=>p._rebaixa);
-    if(colFilters.status==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu));
+    if(colFilters.status==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu, p._loja));
   }
   // sorting
   if(sortKey){
@@ -790,7 +828,7 @@ function renderFifo(){
   const total =fifoData.length;
   const emRbx =fifoData.filter(p=>p._rebaixa).length;
   const pend  =fifoData.filter(p=>!p._rebaixa).length;
-  const naBase=fifoData.filter(p=>!!getVerifMatch(p._plu)).length;
+  const naBase=fifoData.filter(p=>!!getVerifMatch(p._plu, p._loja)).length;
   const quebra=fifoData.filter(p=>String(p._avaria).toUpperCase()==='QUEBRA').length;
   const sel   =Object.values(selection).filter(Boolean).length;
 
@@ -804,6 +842,8 @@ function renderFifo(){
   const btn=document.getElementById('btn-exp');
   btn.disabled=sel===0;
   btn.textContent=sel>0?`⬇ EXPORTAR (${sel}) SELECIONADOS (.xlsx)`:'⬇ EXPORTAR SELECIONADOS (.xlsx)';
+  const btnWpp=document.getElementById('btn-wpp');
+  if(btnWpp) btnWpp.disabled=sel===0;
 
   const cbAll=document.getElementById('cb-all');
   if(cbAll){
@@ -817,7 +857,7 @@ function renderFifo(){
   if(!visible.length){body.innerHTML='<div class="empty">Nenhum produto neste filtro.</div>';return;}
 
   body.innerHTML=visible.map(p=>{
-    const match=getVerifMatch(p._plu);
+    const match=getVerifMatch(p._plu, p._loja);
     const diasN=Number(p._dias);
     const dColor=!isNaN(diasN)?(diasN<=3?'var(--badge-quebra-text)':diasN<=7?'var(--badge-pend-text)':'var(--text)'):'var(--text)';
     const pv=prices[p._id]??'';
@@ -983,7 +1023,7 @@ async function exportarFifo(){
 
     const pv      = prices[p._id]  ? parseFloat(prices[p._id])  : (p._preco  && p._preco !==0 ? p._preco  : null);
     const mg      = margins[p._id] ? parseFloat(margins[p._id]) : (p._margem && p._margem!==0 ? p._margem : null);
-    const m       = getVerifMatch(p._plu);
+    const m       = getVerifMatch(p._plu, p._loja);
     const diaFeito = (m && m.dataFeita) ? fmtDate(m.dataFeita) : '';
     const diasNum  = Number(p._dias);
     const qtdNum   = Number(p._qtd);
@@ -1218,6 +1258,123 @@ function restoreSavedBases(){
       console.log('Base Verificação restaurada:', baseData.length, 'registros');
     } catch(e){ console.warn('Erro ao restaurar Base Verificação:', e); }
   }
+}
+
+// ══════════════════════════════════════════
+//  RELATÓRIO WHATSAPP
+// ══════════════════════════════════════════
+let _relatorioFiltro = 'todos';
+
+function gerarRelatorio(){
+  const chosen = fifoData.filter(p => selection[p._id]);
+  if(!chosen.length){ alert('Selecione ao menos um produto.'); return; }
+  _relatorioFiltro = 'todos';
+  document.getElementById('modal-relatorio').style.display = 'flex';
+  document.getElementById('copiado-msg').style.display = 'none';
+  ['todos','quebra','troca','urgente'].forEach(t => {
+    const btn = document.getElementById('rtab-'+t);
+    if(btn) btn.style.opacity = t==='todos' ? '1' : '0.5';
+  });
+  _buildRelatorio('todos');
+}
+
+function setRelatorioFiltro(filtro){
+  _relatorioFiltro = filtro;
+  ['todos','quebra','troca','urgente'].forEach(t => {
+    const btn = document.getElementById('rtab-'+t);
+    if(btn) btn.style.opacity = t===filtro ? '1' : '0.5';
+  });
+  _buildRelatorio(filtro);
+}
+
+function _buildRelatorio(filtro){
+  const all = fifoData.filter(p => selection[p._id]);
+  const today = new Date();
+  const todayStr = `${p2(today.getDate())}/${p2(today.getMonth()+1)}/${today.getFullYear()}`;
+  const loja = fifoData.length ? String(fifoData[0]._loja||'').trim() : '—';
+
+  let produtos;
+  if(filtro==='quebra')     produtos = all.filter(p => String(p._avaria).toUpperCase()==='QUEBRA');
+  else if(filtro==='troca') produtos = all.filter(p => String(p._avaria).toUpperCase()==='TROCA');
+  else if(filtro==='urgente') produtos = all.filter(p => Number(p._dias) <= 3);
+  else produtos = all;
+
+  const quebra  = all.filter(p => String(p._avaria).toUpperCase()==='QUEBRA');
+  const troca   = all.filter(p => String(p._avaria).toUpperCase()==='TROCA');
+  const semBase = all.filter(p => !getVerifMatch(p._plu));
+  const d0_3    = all.filter(p => Number(p._dias) <= 3);
+  const d4_7    = all.filter(p => Number(p._dias) >= 4 && Number(p._dias) <= 7);
+  const d8_15   = all.filter(p => Number(p._dias) >= 8 && Number(p._dias) <= 15);
+  const d16p    = all.filter(p => Number(p._dias) > 15);
+  const sep = '─'.repeat(32);
+  const labels = {todos:'COMPLETO', quebra:'QUEBRA', troca:'TROCA', urgente:'URGENTES ≤3 DIAS'};
+
+  let txt = '';
+  txt += `📦 *RELATÓRIO FIFO — LOJA ${loja}* | ${labels[filtro]}\n`;
+  txt += `📅 ${todayStr}\n`;
+  txt += `${sep}\n\n`;
+
+  if(filtro==='todos'){
+    txt += `📊 *RESUMO*\n`;
+    txt += `• Total: *${all.length}* produtos\n`;
+    txt += `• 🔴 QUEBRA: *${quebra.length}* | 🔵 TROCA: *${troca.length}*\n`;
+    if(semBase.length) txt += `• ⚠️ Sem base: *${semBase.length}*\n`;
+    txt += `\n⏱️ *URGÊNCIA*\n`;
+    if(d0_3.length)  txt += `• 🚨 0-3 dias: *${d0_3.length}*\n`;
+    if(d4_7.length)  txt += `• ⚠️  4-7 dias: *${d4_7.length}*\n`;
+    if(d8_15.length) txt += `• 📋 8-15 dias: *${d8_15.length}*\n`;
+    if(d16p.length)  txt += `• ✅ 16+ dias:  *${d16p.length}*\n`;
+    txt += `\n${sep}\n\n`;
+    if(quebra.length){
+      txt += `🔴 *QUEBRA (${quebra.length})*\n`;
+      quebra.forEach(p => { txt += _produtoLinha(p); });
+      txt += `\n`;
+    }
+    if(troca.length){
+      txt += `🔵 *TROCA (${troca.length})*\n`;
+      troca.forEach(p => { txt += _produtoLinha(p); });
+      txt += `\n`;
+    }
+  } else if(filtro==='quebra'){
+    txt += `🔴 *QUEBRA — ${produtos.length} produto${produtos.length!==1?'s':''}*\n\n`;
+    produtos.forEach((p,i) => { txt += `${i+1}. ` + _produtoLinha(p); });
+  } else if(filtro==='troca'){
+    txt += `🔵 *TROCA — ${produtos.length} produto${produtos.length!==1?'s':''}*\n\n`;
+    produtos.forEach((p,i) => { txt += `${i+1}. ` + _produtoLinha(p); });
+  } else if(filtro==='urgente'){
+    txt += `🚨 *URGENTES ≤3 DIAS — ${produtos.length} produto${produtos.length!==1?'s':''}*\n\n`;
+    [...produtos].sort((a,b)=>Number(a._dias)-Number(b._dias))
+      .forEach((p,i) => { txt += `${i+1}. ` + _produtoLinha(p); });
+  }
+
+  txt += `${sep}\n`;
+  txt += `_Gestor FIFO v1.9_`;
+  document.getElementById('relatorio-texto').value = txt;
+}
+
+function _produtoLinha(p){
+  const m = getVerifMatch(p._plu, p._loja);
+  const preco = m && m.preco ? `R$ ${fmtPreco(m.preco)}` : '—';
+  const dias  = p._dias!=='' ? `${p._dias}d` : '—';
+  return `• *${p._plu}* ${p._desc}\n  📅 ${fmtDate(p._venc)} | ⏱ ${dias} | Qtd: ${p._qtd||'—'} | 💰 ${preco}\n`;
+}
+
+
+function fecharModal(){
+  document.getElementById('modal-relatorio').style.display = 'none';
+}
+
+function copiarRelatorio(){
+  const txt = document.getElementById('relatorio-texto').value;
+  navigator.clipboard.writeText(txt).then(()=>{
+    document.getElementById('copiado-msg').style.display = 'block';
+    setTimeout(()=>{ document.getElementById('copiado-msg').style.display='none'; }, 2500);
+  }).catch(()=>{
+    document.getElementById('relatorio-texto').select();
+    document.execCommand('copy');
+    document.getElementById('copiado-msg').style.display = 'block';
+    setTimeout(()=>{ document.getElementById('copiado-msg').style.display='none'; }, 2500);
+  });
 }
 
 function toggleTheme(){

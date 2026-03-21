@@ -237,7 +237,7 @@ select.filter-mini { cursor:pointer; }
   <div class="logo">⏱</div>
   <div>
     <div class="app-title">GESTOR FIFO – REBAIXA</div>
-    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v2.0</span></div>
+    <div class="app-sub">CONTROLE DE PRODUTOS PRÓXIMOS AO VENCIMENTO &nbsp;·&nbsp; <span style="color:#f97316;font-weight:700">v2.3</span></div>
   </div>
   <button id="theme-toggle" onclick="toggleTheme()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;"><span id="theme-icon">☀</span> <span id="theme-label">Tema Claro</span></button>
 </header>
@@ -276,6 +276,11 @@ select.filter-mini { cursor:pointer; }
   </div>
 
   <div id="fifo-review" style="display:none">
+    <div id="dup-banner" style="display:none" class="dup-banner">
+      ⚠️ <span id="dup-msg"></span>
+      <button onclick="setFifoFilter('duplicados', this)" style="padding:4px 10px;border-radius:5px;border:1px solid #b45309;background:transparent;color:#f59e0b;font-size:11px;cursor:pointer;font-weight:600;">Ver duplicados</button>
+      <button onclick="document.getElementById('dup-banner').style.display='none'" style="margin-left:auto;padding:4px 8px;border-radius:5px;border:1px solid #b45309;background:transparent;color:#f59e0b;font-size:11px;cursor:pointer;">✕</button>
+    </div>
     <div class="stats">
       <div class="stat"><div class="stat-lbl">TOTAL</div><div class="stat-val" id="s-tot" style="color:#58a6ff">0</div></div>
       <div class="stat"><div class="stat-lbl">JÁ EM REBAIXA</div><div class="stat-val" id="s-rbx" style="color:#3fb950">0</div></div>
@@ -294,6 +299,7 @@ select.filter-mini { cursor:pointer; }
         <button class="filter-btn" onclick="setFifoFilter('sembase',this)">Sem Base</button>
         <button class="filter-btn" onclick="setFifoFilter('quebra',this)" style="border-color:#7f1d1d">🔴 Quebra</button>
         <button class="filter-btn" onclick="setFifoFilter('troca',this)">🔵 Troca</button>
+        <button class="filter-btn" id="btn-filter-dup" onclick="setFifoFilter('duplicados',this)" style="display:none;border-color:#b45309">⚠️ Duplicados</button>
       </div>
       <div class="ml-auto">
         <input class="search-box" type="text" placeholder="🔍 Buscar produto / PLU…" oninput="fifoSearch=this.value;renderFifo()">
@@ -793,6 +799,7 @@ function getVisible(){
   if(fifoFilter==='pendente') arr=arr.filter(p=>!p._rebaixa);
   if(fifoFilter==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu, p._loja));
   if(fifoFilter==='sembase')  arr=arr.filter(p=>!getVerifMatch(p._plu, p._loja));
+  if(fifoFilter==='duplicados') arr=arr.filter(p=>window._dupSet && window._dupKeyFn && window._dupSet.has(window._dupKeyFn(p)));
   if(fifoFilter==='quebra')   arr=arr.filter(p=>String(p._avaria).toUpperCase()==='QUEBRA');
   if(fifoFilter==='troca')    arr=arr.filter(p=>String(p._avaria).toUpperCase()==='TROCA');
   if(fifoSearch){
@@ -838,6 +845,28 @@ function renderFifo(){
   document.getElementById('s-base').textContent  =naBase;
   document.getElementById('s-quebra').textContent=quebra;
   document.getElementById('s-sel').textContent   =sel;
+
+  // ── Duplicate detection: same PLU + same VENCIMENTO ──────────────────
+  const dupKey = p => `${normPlu(p._plu)}_${fmtDate(p._venc)}`;
+  const dupCount = {};
+  fifoData.forEach(p => { const k=dupKey(p); dupCount[k]=(dupCount[k]||0)+1; });
+  const dupSet = new Set(Object.keys(dupCount).filter(k => dupCount[k] > 1));
+  const dupTotal = fifoData.filter(p => dupSet.has(dupKey(p))).length;
+  const dupGroups = dupSet.size;
+
+  const dupBanner = document.getElementById('dup-banner');
+  const dupMsg    = document.getElementById('dup-msg');
+  const dupBtn    = document.getElementById('btn-filter-dup');
+  if(dupTotal > 0){
+    dupMsg.innerHTML = `<strong>${dupGroups} grupo${dupGroups>1?'s':''}</strong> com PLU + vencimento duplicados — <strong>${dupTotal} produtos</strong>`;
+    if(dupBanner) dupBanner.style.display = 'flex';
+    if(dupBtn)    dupBtn.style.display    = 'inline-flex';
+  } else {
+    if(dupBanner) dupBanner.style.display = 'none';
+    if(dupBtn)    dupBtn.style.display    = 'none';
+  }
+  window._dupSet  = dupSet;
+  window._dupKeyFn = dupKey;
 
   const btn=document.getElementById('btn-exp');
   btn.disabled=sel===0;
@@ -891,7 +920,9 @@ function renderFifo(){
     else if(match)        statusBadge='<span class="badge badge-match">📋 NA BASE</span>';
     else                  statusBadge='<span class="badge badge-pend">PENDENTE</span>';
 
-    return `<div class="tr-f ${rowCls}">
+    const isDup = window._dupSet && window._dupKeyFn && window._dupSet.has(window._dupKeyFn(p));
+    const dupClass = isDup ? ' dup-row' : '';
+    return `<div class="tr-f ${rowCls}${dupClass}">
       <span style="text-align:center">
         ${!p._rebaixa
           ?`<input type="checkbox" ${selection[p._id]?'checked':''} onchange="toggleSel(${p._id})" style="width:15px;height:15px;accent-color:#f97316;cursor:pointer">`
@@ -917,7 +948,7 @@ function renderFifo(){
             value="${esc(mg)}" placeholder="0"
             oninput="margins[${p._id}]=this.value;this.classList.toggle('filled',!!this.value)">`
         :`<span class="mono">${p._margem&&p._margem!==0?p._margem+'%':'—'}</span>`}
-      <span>${statusBadge}</span>
+      <span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${statusBadge}${isDup?'<span class="dup-badge">⚠ DUP</span>':''}</span>
     </div>`;
   }).join('');
 }
@@ -938,6 +969,7 @@ function resetFifo(){
   document.getElementById('fi-fifo').value='';
   document.getElementById('fifo-review').style.display='none';
   document.getElementById('fifo-upload').style.display='block';
+  document.getElementById('banner-principal').style.display='none';
   setErr('fifo','');
 }
 
@@ -1025,8 +1057,8 @@ async function exportarFifo(){
     const mg      = margins[p._id] ? parseFloat(margins[p._id]) : (p._margem && p._margem!==0 ? p._margem : null);
     const m       = getVerifMatch(p._plu, p._loja);
     const diaFeito = (m && m.dataFeita) ? fmtDate(m.dataFeita) : '';
-    const diasNum  = Number(p._dias);
-    const qtdNum   = Number(p._qtd);
+    const diasNum  = p._dias!=='' ? Number(p._dias) : NaN;
+    const qtdNum   = p._qtd!=='' ? Number(p._qtd) : NaN;
     const isHighlight = qtdNum > 60 || String(p._desc).toUpperCase().includes(' KG');
 
     const values = [
@@ -1056,7 +1088,7 @@ async function exportarFifo(){
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFFF00'} };
       }
 
-      // DIAS VENC color — matches image 1: red text on light pink bg
+      // DIAS VENC color
       if(ci===8 && !isNaN(diasNum)){
         if(diasNum<=3){
           cell.font = { name:'Calibri', size:11, bold:true, color:{argb:'FFCC0000'} };
@@ -1067,6 +1099,9 @@ async function exportarFifo(){
         } else if(diasNum<=15){
           cell.font = { name:'Calibri', size:11, bold:false, color:{argb:'FF9C6500'} };
           cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFEB9C'} };
+        } else if(diasNum>20){
+          cell.font = { name:'Calibri', size:11, bold:false, color:{argb:'FF375623'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFC6EFCE'} };
         }
       }
       // QTD — same scale
@@ -1237,6 +1272,10 @@ function restoreSavedBases(){
     try {
       baseData = []; baseMap = {};
       bData.data.forEach(rec => {
+        if(!rec.lojaNum){
+          const lm = String(rec.loja||'').match(/^0*(\d+)/);
+          rec.lojaNum = lm ? String(parseInt(lm[1],10)) : String(rec.loja||'');
+        }
         baseData.push(rec);
         const k = normPlu(rec.plu);
         if(!baseMap[k]) baseMap[k]=[];
@@ -1301,7 +1340,7 @@ function _buildRelatorio(filtro){
 
   const quebra  = all.filter(p => String(p._avaria).toUpperCase()==='QUEBRA');
   const troca   = all.filter(p => String(p._avaria).toUpperCase()==='TROCA');
-  const semBase = all.filter(p => !getVerifMatch(p._plu));
+  const semBase = all.filter(p => !getVerifMatch(p._plu, p._loja));
   const d0_3    = all.filter(p => Number(p._dias) <= 3);
   const d4_7    = all.filter(p => Number(p._dias) >= 4 && Number(p._dias) <= 7);
   const d8_15   = all.filter(p => Number(p._dias) >= 8 && Number(p._dias) <= 15);
@@ -1362,6 +1401,7 @@ function _produtoLinha(p){
 
 function fecharModal(){
   document.getElementById('modal-relatorio').style.display = 'none';
+  document.getElementById('copiado-msg').style.display = 'none';
 }
 
 function copiarRelatorio(){
@@ -1376,6 +1416,13 @@ function copiarRelatorio(){
     setTimeout(()=>{ document.getElementById('copiado-msg').style.display='none'; }, 2500);
   });
 }
+
+// ESC fecha modal
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){
+    fecharModal();
+  }
+});
 
 function toggleTheme(){
   const isLight=document.body.classList.toggle('light');

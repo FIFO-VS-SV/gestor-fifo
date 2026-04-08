@@ -743,9 +743,25 @@ function loadFifo(file){
         return temVenc||temDias||temQtd;
       });
 
+      // Enriquece _rebaixa e _diafeito via base_verificação:
+      // se o produto já consta na base com rebaixa feita para esta loja,
+      // marca como rebaixado e usa DATA_FIM (validade) como DIA FEITO
+      if(baseMap && Object.keys(baseMap).length){
+        fifoData.forEach(p=>{
+          if(!p._rebaixa){
+            const m=getVerifMatch(p._plu, String(p._loja??'').trim());
+            if(m){
+              p._rebaixa=true;
+              p._diafeito=m.validade||p._diafeito;
+            }
+          }
+        });
+      }
+
       selection={}; prices={}; margins={};
       fifoData.forEach(p=>{
-        if(!p._rebaixa) selection[p._id]=true;
+        // pendentes continuam marcados por padrão; itens já feitos ficam desmarcados, mas agora também são selecionáveis
+        selection[p._id] = !p._rebaixa;
         prices[p._id] =p._preco &&p._preco !==0?String(p._preco):'';
         margins[p._id]=p._margem&&p._margem!==0?String(p._margem):'';
       });
@@ -876,7 +892,7 @@ function renderFifo(){
 
   const cbAll=document.getElementById('cb-all');
   if(cbAll){
-    const pv=getVisible().filter(p=>!p._rebaixa);
+    const pv=getVisible();
     cbAll.checked=pv.length>0&&pv.every(p=>selection[p._id]);
     cbAll.indeterminate=!cbAll.checked&&pv.some(p=>selection[p._id]);
   }
@@ -924,9 +940,7 @@ function renderFifo(){
     const dupClass = isDup ? ' dup-row' : '';
     return `<div class="tr-f ${rowCls}${dupClass}">
       <span style="text-align:center">
-        ${!p._rebaixa
-          ?`<input type="checkbox" ${selection[p._id]?'checked':''} onchange="toggleSel(${p._id})" style="width:15px;height:15px;accent-color:#f97316;cursor:pointer">`
-          :`<span style="color:var(--badge-ok-text)">✓</span>`}
+        <input type="checkbox" ${selection[p._id]?'checked':''} onchange="toggleSel(${p._id})" style="width:15px;height:15px;accent-color:#f97316;cursor:pointer">
       </span>
       <span class="mono">${esc(p._loja)||'—'}</span>
       <span style="font-family:monospace;font-size:11px;color:#f97316">${esc(p._plu)||'—'}</span>
@@ -961,7 +975,7 @@ function setFifoFilter(f,btn){
   btn.classList.add('active');
   renderFifo();
 }
-function toggleAll(checked){getVisible().filter(p=>!p._rebaixa).forEach(p=>{selection[p._id]=checked;});renderFifo();}
+function toggleAll(checked){getVisible().forEach(p=>{selection[p._id]=checked;});renderFifo();}
 function selAllPend(){getVisible().filter(p=>!p._rebaixa).forEach(p=>{selection[p._id]=true;});renderFifo();}
 function clearSel(){getVisible().forEach(p=>{selection[p._id]=false;});renderFifo();}
 function resetFifo(){

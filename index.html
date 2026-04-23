@@ -609,12 +609,12 @@ function loadBase(file) {
         const r=rows[i];
         const plu=String(r[0]??'').trim();
         if(!plu||plu==='') continue;
-        const lojaRaw = String(r[8]??'').trim();
-        const lojaMatch = lojaRaw.match(/^0*(\d+)/);
-        const lojaNum = lojaMatch ? String(parseInt(lojaMatch[1],10)) : lojaRaw;
+        const setorRaw = String(r[8]??'').trim();
+        const lojaMatch2 = setorRaw.match(/^(\d+)/);
+        const lojaNum = lojaMatch2 ? String(parseInt(lojaMatch2[1],10)) : setorRaw;
         const rec={plu,desc:String(r[1]??'').trim(),unid:String(r[2]??'').trim(),
           preco:r[3]??'',validade:r[4]??'',qtd:r[5]??'',
-          usuario:String(r[6]??'').trim(),dataFeita:r[7]??'',loja:lojaRaw,lojaNum};
+          usuario:String(r[6]??'').trim(),dataFeita:r[7]??'',loja:lojaNum,lojaNum,setor:setorRaw};
         baseData.push(rec);
         if(!baseMap[normPlu(plu)]) baseMap[normPlu(plu)]=[];
         baseMap[normPlu(plu)].push(rec);
@@ -634,7 +634,7 @@ function loadBase(file) {
       // Save to localStorage
       const bSaved = saveBaseToStorage('base', baseData, file.name);
       if(bSaved) showSavedBanner('base', file.name, new Date().toISOString(), baseData.length);
-      if(fifoData.length) renderFifo();
+      if(fifoData.length){ enrichFifo(); renderFifo(); }
     }catch(err){setErr('base','Erro: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
@@ -695,7 +695,7 @@ function loadFifo(file){
 
       const ci=keys=>fifoHeaders.findIndex(h=>keys.some(k=>norm(h).includes(k)));
       const idx={
-        loja:  ci(['loja']),
+        loja:  ci(['loja','filial','codloja','cod_loja','cod.loja','estabelec']),
         plu:   ci(['plu']),
         desc:  ci(['descricao','descri','descr','produto','nome','desc']),
         avaria:ci(['avaria']),
@@ -718,7 +718,7 @@ function loadFifo(file){
         const avaria = princRec ? princRec.avaria  : String(get(row,idx.avaria)??'').trim();
 
         return {
-          _id:i, _loja:get(row,idx.loja), _plu:plu,
+          _id:i, _loja:(()=>{const rv=get(row,idx.loja);const rs=String(rv??'').trim().replace(/\.0$/,'');const rn=parseInt(rs,10);return !isNaN(rn)?String(rn):rs;})(), _plu:plu,
           _desc:desc, _avaria:avaria,
           _venc:get(row,idx.venc), _dias:get(row,idx.dias),
           _qtd:(()=>{
@@ -743,20 +743,7 @@ function loadFifo(file){
         return temVenc||temDias||temQtd;
       });
 
-      // Enriquece _rebaixa e _diafeito via base_verificação:
-      // se o produto já consta na base com rebaixa feita para esta loja,
-      // marca como rebaixado e usa DATA_FIM (validade) como DIA FEITO
-      if(baseMap && Object.keys(baseMap).length){
-        fifoData.forEach(p=>{
-          if(!p._rebaixa){
-            const m=getVerifMatch(p._plu, String(p._loja??'').trim());
-            if(m){
-              p._rebaixa=true;
-              p._diafeito=m.validade||p._diafeito;
-            }
-          }
-        });
-      }
+      enrichFifo();
 
       selection={}; prices={}; margins={};
       fifoData.forEach(p=>{
@@ -774,6 +761,25 @@ function loadFifo(file){
   reader.readAsArrayBuffer(file);
 }
 
+function enrichFifo(){
+  if(!fifoData.length || !baseMap || !Object.keys(baseMap).length) return;
+  fifoData.forEach(p=>{
+    const _lojaStr = String(p._loja??'').trim().replace(/\.0$/,'');
+    const _lojaN = parseInt(_lojaStr, 10);
+    const _lojaKey = !isNaN(_lojaN) ? String(_lojaN) : _lojaStr;
+    const m = getVerifMatch(p._plu, _lojaKey);
+    if(m){
+      p._rebaixa=true;
+      p._diafeito=m.validade||p._diafeito;
+    }
+  });
+  // re-sync selection for newly enriched items
+  fifoData.forEach(p=>{
+    if(p._rebaixa && selection[p._id]===undefined) selection[p._id]=false;
+    else if(p._rebaixa) selection[p._id]=false;
+  });
+}
+
 function getVerifMatch(plu, lojaFilter){
   const recs=baseMap[normPlu(plu)];
   if(!recs||!recs.length) return null;
@@ -781,7 +787,8 @@ function getVerifMatch(plu, lojaFilter){
   // Try to match by loja first
   let filtered = recs;
   if(lojaFilter){
-    const lf = String(parseInt(lojaFilter,10)||lojaFilter);
+    const _lp = parseInt(lojaFilter, 10);
+    const lf = !isNaN(_lp) ? String(_lp) : lojaFilter;
     const byLoja = recs.filter(r => r.lojaNum === lf || String(r.lojaNum) === lf);
     if(byLoja.length) filtered = byLoja;
     // if no match for this loja, return null — product not rebaixado in this store
@@ -1309,6 +1316,7 @@ function restoreSavedBases(){
       renderBaseTable(baseData);
       showSavedBanner('base', bData.filename, bData.savedAt, baseData.length);
       console.log('Base Verificação restaurada:', baseData.length, 'registros');
+      if(fifoData.length){ enrichFifo(); renderFifo(); }
     } catch(e){ console.warn('Erro ao restaurar Base Verificação:', e); }
   }
 }

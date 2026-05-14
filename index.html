@@ -609,7 +609,7 @@ function loadBase(file) {
         const r=rows[i];
         const plu=String(r[0]??'').trim();
         if(!plu||plu==='') continue;
-        const setorRaw = String(r[8]??'').trim();
+        const setorRaw = String(r[10]??'').trim();
         const lojaMatch2 = setorRaw.match(/^(\d+)/);
         const lojaNum = lojaMatch2 ? String(parseInt(lojaMatch2[1],10)) : setorRaw;
         const rec={plu,desc:String(r[1]??'').trim(),unid:String(r[2]??'').trim(),

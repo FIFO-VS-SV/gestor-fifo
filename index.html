@@ -609,7 +609,7 @@ function loadBase(file) {
         const r=rows[i];
         const plu=String(r[0]??'').trim();
         if(!plu||plu==='') continue;
-        const setorRaw = String(r[10]??'').trim();
+        const setorRaw = String((r[10]!==undefined&&r[10]!==null&&String(r[10]).trim()!=='') ? r[10] : (r[8]??'')).trim();
         const lojaMatch2 = setorRaw.match(/^(\d+)/);
         const lojaNum = lojaMatch2 ? String(parseInt(lojaMatch2[1],10)) : setorRaw;
         const rec={plu,desc:String(r[1]??'').trim(),unid:String(r[2]??'').trim(),
@@ -791,7 +791,6 @@ function getVerifMatch(plu, lojaFilter){
     const lf = !isNaN(_lp) ? String(_lp) : lojaFilter;
     const byLoja = recs.filter(r => r.lojaNum === lf || String(r.lojaNum) === lf);
     if(byLoja.length) filtered = byLoja;
-    // if no match for this loja, return null — product not rebaixado in this store
     else return null;
   }
 
@@ -800,6 +799,10 @@ function getVerifMatch(plu, lojaFilter){
     const db=b.dataFeita instanceof Date?b.dataFeita:new Date(b.dataFeita||0);
     return db-da;
   })[0];
+}
+
+function getVerifDisplayMatch(plu, lojaFilter){
+  return getVerifMatch(plu, lojaFilter);
 }
 
 function sortBy(key, btn){
@@ -820,8 +823,8 @@ function getVisible(){
   let arr=fifoData;
   if(fifoFilter==='rebaixa')  arr=arr.filter(p=>p._rebaixa);
   if(fifoFilter==='pendente') arr=arr.filter(p=>!p._rebaixa);
-  if(fifoFilter==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu, p._loja));
-  if(fifoFilter==='sembase')  arr=arr.filter(p=>!getVerifMatch(p._plu, p._loja));
+  if(fifoFilter==='nabase')   arr=arr.filter(p=>!!getVerifDisplayMatch(p._plu, p._loja));
+  if(fifoFilter==='sembase')  arr=arr.filter(p=>!getVerifDisplayMatch(p._plu, p._loja));
   if(fifoFilter==='duplicados') arr=arr.filter(p=>window._dupSet && window._dupKeyFn && window._dupSet.has(window._dupKeyFn(p)));
   if(fifoFilter==='quebra')   arr=arr.filter(p=>String(p._avaria).toUpperCase()==='QUEBRA');
   if(fifoFilter==='troca')    arr=arr.filter(p=>String(p._avaria).toUpperCase()==='TROCA');
@@ -835,7 +838,7 @@ function getVisible(){
   if(colFilters.status){
     if(colFilters.status==='pendente') arr=arr.filter(p=>!p._rebaixa);
     if(colFilters.status==='rebaixa')  arr=arr.filter(p=>p._rebaixa);
-    if(colFilters.status==='nabase')   arr=arr.filter(p=>!!getVerifMatch(p._plu, p._loja));
+    if(colFilters.status==='nabase')   arr=arr.filter(p=>!!getVerifDisplayMatch(p._plu, p._loja));
   }
   // sorting
   if(sortKey){
@@ -858,7 +861,7 @@ function renderFifo(){
   const total =fifoData.length;
   const emRbx =fifoData.filter(p=>p._rebaixa).length;
   const pend  =fifoData.filter(p=>!p._rebaixa).length;
-  const naBase=fifoData.filter(p=>!!getVerifMatch(p._plu, p._loja)).length;
+  const naBase=fifoData.filter(p=>!!getVerifDisplayMatch(p._plu, p._loja)).length;
   const quebra=fifoData.filter(p=>String(p._avaria).toUpperCase()==='QUEBRA').length;
   const sel   =Object.values(selection).filter(Boolean).length;
 
@@ -909,7 +912,7 @@ function renderFifo(){
   if(!visible.length){body.innerHTML='<div class="empty">Nenhum produto neste filtro.</div>';return;}
 
   body.innerHTML=visible.map(p=>{
-    const match=getVerifMatch(p._plu, p._loja);
+    const match=getVerifDisplayMatch(p._plu, p._loja);
     const diasN=Number(p._dias);
     const dColor=!isNaN(diasN)?(diasN<=3?'var(--badge-quebra-text)':diasN<=7?'var(--badge-pend-text)':'var(--text)'):'var(--text)';
     const pv=prices[p._id]??'';
@@ -1076,7 +1079,7 @@ async function exportarFifo(){
 
     const pv      = prices[p._id]  ? parseFloat(prices[p._id])  : (p._preco  && p._preco !==0 ? p._preco  : null);
     const mg      = margins[p._id] ? parseFloat(margins[p._id]) : (p._margem && p._margem!==0 ? p._margem : null);
-    const m       = getVerifMatch(p._plu, p._loja);
+    const m       = getVerifDisplayMatch(p._plu, p._loja);
     const diaFeito = (m && m.dataFeita) ? fmtDate(m.dataFeita) : '';
     const diasNum  = p._dias!=='' ? Number(p._dias) : NaN;
     const qtdNum   = p._qtd!=='' ? Number(p._qtd) : NaN;
@@ -1362,7 +1365,7 @@ function _buildRelatorio(filtro){
 
   const quebra  = all.filter(p => String(p._avaria).toUpperCase()==='QUEBRA');
   const troca   = all.filter(p => String(p._avaria).toUpperCase()==='TROCA');
-  const semBase = all.filter(p => !getVerifMatch(p._plu, p._loja));
+  const semBase = all.filter(p => !getVerifDisplayMatch(p._plu, p._loja));
   const d0_3    = all.filter(p => Number(p._dias) <= 3);
   const d4_7    = all.filter(p => Number(p._dias) >= 4 && Number(p._dias) <= 7);
   const d8_15   = all.filter(p => Number(p._dias) >= 8 && Number(p._dias) <= 15);
@@ -1414,7 +1417,7 @@ function _buildRelatorio(filtro){
 }
 
 function _produtoLinha(p){
-  const m = getVerifMatch(p._plu, p._loja);
+  const m = getVerifDisplayMatch(p._plu, p._loja);
   const preco = m && m.preco ? `R$ ${fmtPreco(m.preco)}` : '—';
   const dias  = p._dias!=='' ? `${p._dias}d` : '—';
   return `• *${p._plu}* ${p._desc}\n  📅 ${fmtDate(p._venc)} | ⏱ ${dias} | Qtd: ${p._qtd||'—'} | 💰 ${preco}\n`;
